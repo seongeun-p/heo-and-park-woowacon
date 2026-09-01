@@ -1,0 +1,1144 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Ink Garden — ASCII/Dither Effect</title>
+<style>
+  :root{
+    --bg:#0b0c0f; --panel:#141620; --panel2:#1b1e2b; --line:#2a2e40;
+    --text:#eef0f6; --dim:#8b90a5; --accent:#3ca6ff;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Noto Sans KR",sans-serif;}
+  #app{display:flex;height:100vh;}
+  #stage{
+    flex:1; display:flex; align-items:center; justify-content:center;
+    position:relative; background:
+      linear-gradient(45deg,#15161c 25%,transparent 25%) -10px 0/20px 20px,
+      linear-gradient(-45deg,#15161c 25%,transparent 25%) -10px 0/20px 20px,
+      linear-gradient(45deg,transparent 75%,#15161c 75%) -10px 0/20px 20px,
+      linear-gradient(-45deg,transparent 75%,#15161c 75%) -10px 0/20px 20px,
+      #0e0f13;
+    overflow:hidden;
+  }
+  #canvasWrap{position:relative; box-shadow:0 20px 60px rgba(0,0,0,.6);}
+  canvas{display:block; max-width:min(78vw,900px); max-height:82vh; cursor:crosshair;}
+  #dropHint{
+    position:absolute; inset:0; display:flex; flex-direction:column; gap:10px;
+    align-items:center; justify-content:center; color:var(--dim); font-size:14px;
+    pointer-events:none; text-align:center; padding:20px;
+  }
+  #dropHint b{color:var(--text); font-size:16px;}
+  #topbar{
+    position:absolute; top:16px; left:16px; right:16px; display:flex;
+    justify-content:space-between; align-items:center; z-index:5; pointer-events:none;
+  }
+  #topbar .title{font-weight:800; font-size:15px; letter-spacing:.2px; pointer-events:auto;}
+  #topbar .controls{display:flex; gap:8px; pointer-events:auto;}
+  button, .fileBtn{
+    background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    padding:8px 12px; border-radius:8px; font-size:12.5px; cursor:pointer;
+  }
+  button:hover, .fileBtn:hover{border-color:var(--accent);}
+  #panel{
+    width:340px; min-width:340px; background:var(--panel); border-left:1px solid var(--line);
+    overflow-y:auto; padding:16px 16px 60px;
+  }
+  #panel h1{font-size:16px; margin:0 0 4px;}
+  #panel .sub{color:var(--dim); font-size:12px; margin:0 0 16px;}
+  fieldset{
+    border:1px solid var(--line); border-radius:10px; margin:0 0 14px; padding:10px 12px 14px;
+  }
+  legend{color:var(--accent); font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; padding:0 6px;}
+  .row{display:flex; align-items:center; gap:8px; margin:8px 0; font-size:12.5px;}
+  .row label{flex:0 0 108px; color:var(--dim);}
+  .row .val{flex:0 0 40px; text-align:right; color:var(--text); font-variant-numeric:tabular-nums;}
+  .row input[type=range]{flex:1; accent-color:var(--accent);}
+  .row select, .row input[type=text]{
+    flex:1; background:var(--panel2); color:var(--text); border:1px solid var(--line);
+    border-radius:6px; padding:5px 6px; font-size:12px;
+  }
+  .row input[type=color]{width:34px; height:26px; border:none; background:none; padding:0;}
+  .row input[type=checkbox]{width:16px; height:16px; accent-color:var(--accent);}
+  .pfxRow{display:grid; grid-template-columns:20px 1fr 70px 34px; align-items:center; gap:8px; margin:6px 0;}
+  .pfxRow label{font-size:12.5px; color:var(--dim);}
+  .hint{color:var(--dim); font-size:11px; line-height:1.5; margin:4px 0 0;}
+  #fileInput{display:none;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="stage">
+    <div id="topbar">
+      <div class="title">🌱 Ink Garden</div>
+      <div class="controls">
+        <label class="fileBtn" for="fileInput">이미지 열기</label>
+        <button id="playBtn">⏸ 애니메이션</button>
+      </div>
+    </div>
+    <div id="canvasWrap">
+      <canvas id="cv" width="720" height="720"></canvas>
+      <div id="dropHint"><b>이미지를 드래그하거나</b><span>"이미지 열기"를 눌러 업로드하세요</span></div>
+    </div>
+  </div>
+  <div id="panel">
+    <h1>Ink Garden 컨트롤</h1>
+    <p class="sub">21st.dev "Ink Garden" 스타일 ASCII/디더 이펙트를 Canvas2D로 재구현.</p>
+
+    <fieldset>
+      <legend>Render</legend>
+      <div class="row"><label>renderMode</label>
+        <select data-path="renderMode">
+          <option value="characters">characters</option>
+          <option value="dither" selected>dither</option>
+          <option value="mosaic">mosaic</option>
+          <option value="pixel">pixel</option>
+          <option value="dots">dots</option>
+          <option value="cross">cross</option>
+          <option value="diamond">diamond</option>
+          <option value="voxel">voxel</option>
+          <option value="lego">lego</option>
+          <option value="mixed">mixed</option>
+          <option value="lines">lines</option>
+          <option value="diagonal">diagonal</option>
+          <option value="braille">braille</option>
+          <option value="disco">disco</option>
+          <option value="hexdump">hexdump</option>
+          <option value="matrix">matrix</option>
+          <option value="rings">rings</option>
+          <option value="hearts">hearts</option>
+          <option value="stars">stars</option>
+          <option value="hexagons">hexagons</option>
+          <option value="triangles">triangles</option>
+          <option value="bubbles">bubbles</option>
+          <option value="hatch">hatch</option>
+          <option value="contour">contour</option>
+          <option value="halfblocks">halfblocks</option>
+        </select>
+      </div>
+      <div class="row"><label>charSet</label>
+        <select data-path="charSet">
+          <option value="standard" selected>standard</option>
+          <option value="blocks">blocks</option>
+          <option value="binary">binary</option>
+          <option value="hex">hex</option>
+          <option value="matrix">matrix(katakana)</option>
+          <option value="custom">custom</option>
+        </select>
+      </div>
+      <div class="row"><label>customChars</label><input type="text" data-path="customChars" placeholder="예: ABXO*" /></div>
+      <div class="row"><label>cellSize</label><input type="range" min="4" max="32" step="1" data-path="cellSize" data-num="1"><span class="val" data-show="cellSize"></span></div>
+      <div class="row"><label>coverage</label><input type="range" min="0" max="100" step="1" data-path="coverage" data-num="1"><span class="val" data-show="coverage"></span></div>
+      <div class="row"><label>density</label><input type="range" min="0" max="100" step="1" data-path="density" data-num="1"><span class="val" data-show="density"></span></div>
+      <div class="row"><label>edgeEmphasis</label><input type="range" min="0" max="100" step="1" data-path="edgeEmphasis" data-num="1"><span class="val" data-show="edgeEmphasis"></span></div>
+      <div class="row"><label>invert</label><input type="checkbox" data-path="invert"></div>
+      <div class="row"><label>styleBlend</label>
+        <select data-path="styleBlend">
+          <option value="source-over" selected>source-over</option>
+          <option value="lighter">lighter</option>
+          <option value="multiply">multiply</option>
+          <option value="screen">screen</option>
+          <option value="difference">difference</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Background</legend>
+      <div class="row"><label>bgMode</label>
+        <select data-path="bgMode">
+          <option value="none" selected>none</option>
+          <option value="blur">blur</option>
+          <option value="color">color</option>
+          <option value="photo">photo</option>
+        </select>
+      </div>
+      <div class="row"><label>bgBlur</label><input type="range" min="0" max="40" step="1" data-path="bgBlur" data-num="1"><span class="val" data-show="bgBlur"></span></div>
+      <div class="row"><label>bgOpacity</label><input type="range" min="0" max="100" step="1" data-path="bgOpacity" data-num="1"><span class="val" data-show="bgOpacity"></span></div>
+      <div class="row"><label>bgColor</label><input type="color" data-path="bgColor" value="#000000"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Color</legend>
+      <div class="row"><label>brightness</label><input type="range" min="-100" max="100" step="1" data-path="brightness" data-num="1"><span class="val" data-show="brightness"></span></div>
+      <div class="row"><label>contrast</label><input type="range" min="0" max="300" step="1" data-path="contrast" data-num="1"><span class="val" data-show="contrast"></span></div>
+      <div class="row"><label>saturation</label><input type="range" min="0" max="300" step="1" data-path="saturation" data-num="1"><span class="val" data-show="saturation"></span></div>
+      <div class="row"><label>grayscale</label><input type="range" min="0" max="100" step="1" data-path="grayscale" data-num="1"><span class="val" data-show="grayscale"></span></div>
+      <div class="row"><label>tint</label><input type="color" data-path="tint"></div>
+      <div class="row"><label>tintOpacity</label><input type="range" min="0" max="100" step="1" data-path="tintOpacity" data-num="1"><span class="val" data-show="tintOpacity"></span></div>
+      <div class="row"><label>overlayBlend</label>
+        <select data-path="overlayBlend">
+          <option value="multiply" selected>multiply</option>
+          <option value="screen">screen</option>
+          <option value="overlay">overlay</option>
+          <option value="color">color</option>
+          <option value="hue">hue</option>
+        </select>
+      </div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Blur</legend>
+      <div class="row"><label>blurType</label>
+        <select data-path="blurType">
+          <option value="off" selected>off</option>
+          <option value="gaussian">gaussian</option>
+          <option value="directional">directional</option>
+          <option value="tilt">tilt</option>
+          <option value="lens">lens</option>
+          <option value="progressive">progressive</option>
+        </select>
+      </div>
+      <div class="row"><label>blurAmount</label><input type="range" min="0" max="60" step="1" data-path="blurAmount" data-num="1"><span class="val" data-show="blurAmount"></span></div>
+      <div class="row"><label>blurAngle</label><input type="range" min="0" max="360" step="1" data-path="blurAngle" data-num="1"><span class="val" data-show="blurAngle"></span></div>
+      <div class="row"><label>bothSides</label><input type="checkbox" data-path="directionalBothSides"></div>
+      <div class="row"><label>tiltFocus</label><input type="range" min="0" max="50" step="1" data-path="tiltFocus" data-num="1"><span class="val" data-show="tiltFocus"></span></div>
+      <div class="row"><label>tiltPosition</label><input type="range" min="0" max="100" step="1" data-path="tiltPosition" data-num="1"><span class="val" data-show="tiltPosition"></span></div>
+      <div class="row"><label>tiltFeather</label><input type="range" min="1" max="50" step="1" data-path="tiltFeather" data-num="1"><span class="val" data-show="tiltFeather"></span></div>
+      <div class="row"><label>lensFocus</label><input type="range" min="0" max="80" step="1" data-path="lensFocus" data-num="1"><span class="val" data-show="lensFocus"></span></div>
+      <div class="row"><label>blurCenterX</label><input type="range" min="0" max="100" step="1" data-path="blurCenterX" data-num="1"><span class="val" data-show="blurCenterX"></span></div>
+      <div class="row"><label>blurCenterY</label><input type="range" min="0" max="100" step="1" data-path="blurCenterY" data-num="1"><span class="val" data-show="blurCenterY"></span></div>
+      <div class="row"><label>progressivePos</label><input type="range" min="0" max="100" step="1" data-path="progressivePosition" data-num="1"><span class="val" data-show="progressivePosition"></span></div>
+      <div class="row"><label>progressiveRev</label><input type="checkbox" data-path="progressiveReverse"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Post FX</legend>
+      <div id="pfxList"></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Animation</legend>
+      <div class="row"><label>animated</label><input type="checkbox" data-path="animated"></div>
+      <div class="row"><label>animStyle</label>
+        <select data-path="animStyle">
+          <option value="wave">wave</option>
+          <option value="pulse" selected>pulse</option>
+          <option value="shimmer">shimmer</option>
+          <option value="ripple">ripple</option>
+          <option value="flicker">flicker</option>
+        </select>
+      </div>
+      <div class="row"><label>speed</label><input type="checkbox" data-path="animSpeed.enabled"><input type="range" min="0" max="200" step="1" data-path="animSpeed.intensity" data-num="1"><span class="val" data-show="animSpeed.intensity"></span></div>
+      <div class="row"><label>intensity</label><input type="checkbox" data-path="animIntensity.enabled"><input type="range" min="0" max="100" step="1" data-path="animIntensity.intensity" data-num="1"><span class="val" data-show="animIntensity.intensity"></span></div>
+    </fieldset>
+
+    <fieldset>
+      <legend>Lights</legend>
+      <div class="row"><label>enabled</label><input type="checkbox" data-path="lights.enabled"></div>
+      <p class="hint">켜고 캔버스를 클릭하면 빛 포인트가 추가돼요 (최대 6개).</p>
+      <button id="clearLights" type="button">라이트 초기화</button>
+    </fieldset>
+
+    <fieldset>
+      <legend>Mask (원본 사진 리빌)</legend>
+      <div class="row"><label>enabled</label><input type="checkbox" data-path="mask.enabled"></div>
+      <div class="row"><label>brushSize</label><input type="range" min="5" max="120" step="1" data-path="mask.brushSize" data-num="1"><span class="val" data-show="mask.brushSize"></span></div>
+      <div class="row"><label>invert</label><input type="checkbox" data-path="mask.invert"></div>
+      <div class="row"><label>showOverlay</label><input type="checkbox" data-path="mask.showOverlay"></div>
+      <p class="hint">켜고 캔버스를 드래그해서 칠하면 그 부분만 원본 사진이 드러나요.</p>
+      <button id="clearMask" type="button">마스크 초기화</button>
+    </fieldset>
+
+    <p class="hint">toneCurve는 항등(identity) 커브로 고정되어 있어요 (커브 에디터는 이번 버전에 없음).</p>
+  </div>
+</div>
+
+<input id="fileInput" type="file" accept="image/*" />
+
+<script>
+/* ============== 기본 파라미터 (요청 JSON 그대로) ============== */
+const DEFAULTS = {
+  renderMode: "dither",
+  bgMode: "none",
+  bgBlur: 12,
+  bgOpacity: 90,
+  bgColor: "#000000",
+  cellSize: 9,
+  coverage: 100,
+  invert: false,
+  styleBlend: "source-over",
+  charSet: "standard",
+  customChars: "",
+  brightness: 0,
+  contrast: 240,
+  edgeEmphasis: 0,
+  density: 20,
+  toneCurve: [{x:0,y:0},{x:1,y:1}],
+  tint: "#3ca6ff",
+  tintOpacity: 0,
+  overlayBlend: "multiply",
+  saturation: 100,
+  grayscale: 0,
+  blurType: "off",
+  blurAmount: 35,
+  blurAngle: 0,
+  directionalBothSides: false,
+  tiltFocus: 35,
+  tiltPosition: 50,
+  tiltFeather: 15,
+  lensFocus: 40,
+  blurCenterX: 50,
+  blurCenterY: 50,
+  progressivePosition: 55,
+  progressiveReverse: false,
+  pfx: {
+    vignette:  {enabled:false, intensity:38},
+    scanLines: {enabled:false, intensity:40},
+    chromatic: {enabled:false, intensity:15},
+    bloom:     {enabled:false, intensity:25},
+    filmGrain: {enabled:false, intensity:30},
+    glitch:    {enabled:false, intensity:20},
+    pixelate:  {enabled:false, intensity:15},
+    halftone:  {enabled:false, intensity:20},
+    filmDust:  {enabled:false, intensity:20},
+  },
+  animated: true,
+  animStyle: "pulse",
+  animSpeed: {enabled:true, intensity:100},
+  animIntensity: {enabled:true, intensity:60},
+  lights: {enabled:false, points:[]},
+  mask: {enabled:false, tool:"freehand", brushSize:30, showOverlay:true, invert:false, dataUrl:null, shapes:[]},
+};
+
+function deepClone(o){ return JSON.parse(JSON.stringify(o)); }
+const state = deepClone(DEFAULTS);
+
+/* ============== DOM refs ============== */
+const cv = document.getElementById('cv');
+const ctx = cv.getContext('2d');
+const panel = document.getElementById('panel');
+const dropHint = document.getElementById('dropHint');
+const fileInput = document.getElementById('fileInput');
+const playBtn = document.getElementById('playBtn');
+
+/* ============== charSets ============== */
+const CHARSETS = {
+  standard: ' .:-=+*#%@',
+  blocks: ' ░▒▓█',
+  binary: ' 01',
+  hex: ' 0123456789abcdef',
+  matrix: ' ｦｱｳｴｵｶｷｹｺｻｼｽｾｹﾂﾃﾆﾇﾈﾊﾋﾎﾏﾐﾑﾒﾓﾔﾕﾗﾘﾜ',
+};
+function getCharset(){
+  if(state.charSet === 'custom' && state.customChars.trim().length){
+    return ' ' + state.customChars.trim();
+  }
+  return CHARSETS[state.charSet] || CHARSETS.standard;
+}
+
+/* ============== utils ============== */
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+function hexToRgb(hex){
+  const m = hex.replace('#','');
+  const n = m.length===3 ? m.split('').map(c=>c+c).join('') : m;
+  const v = parseInt(n,16);
+  return { r:(v>>16)&255, g:(v>>8)&255, b:v&255 };
+}
+function lum(r,g,b){ return (0.2126*r+0.7152*g+0.0722*b)/255; }
+function hash2(x,y){
+  let n = x*374761393 + y*668265263;
+  n = (n ^ (n>>13)) * 1274126177;
+  n = n ^ (n>>16);
+  return ((n>>>0) % 1000)/1000;
+}
+
+/* ============== 이미지 로딩 ============== */
+let sourceImg = null;
+let srcCanvas = null; // 캔버스 크기에 맞춰 그려둔 원본(샘플용)
+let samples = null;   // {r,g,b,l} 배열
+let cols=0, rows=0;
+
+function loadImageFile(file){
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = ()=>{
+    sourceImg = img;
+    dropHint.style.display = 'none';
+    fitCanvasToImage();
+    rebuildSamples();
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+}
+fileInput.addEventListener('change', e=>{
+  if(e.target.files && e.target.files[0]) loadImageFile(e.target.files[0]);
+});
+['dragover','drop'].forEach(evt=>{
+  document.getElementById('stage').addEventListener(evt, e=>e.preventDefault());
+});
+document.getElementById('stage').addEventListener('drop', e=>{
+  e.preventDefault();
+  const f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if(f && f.type.startsWith('image/')) loadImageFile(f);
+});
+
+function fitCanvasToImage(){
+  const maxSide = 760;
+  let w = sourceImg.naturalWidth, h = sourceImg.naturalHeight;
+  const scale = Math.min(1, maxSide / Math.max(w,h));
+  cv.width = Math.max(2, Math.round(w*scale));
+  cv.height = Math.max(2, Math.round(h*scale));
+  paintMaskCanvas = document.createElement('canvas');
+  paintMaskCanvas.width = cv.width; paintMaskCanvas.height = cv.height;
+}
+
+function rebuildSamples(){
+  if(!sourceImg) return;
+  srcCanvas = document.createElement('canvas');
+  srcCanvas.width = cv.width; srcCanvas.height = cv.height;
+  const sctx = srcCanvas.getContext('2d');
+  // cover-fit draw
+  const iw=sourceImg.naturalWidth, ih=sourceImg.naturalHeight;
+  const cw=cv.width, ch=cv.height;
+  const scale = Math.max(cw/iw, ch/ih);
+  const dw = iw*scale, dh = ih*scale;
+  sctx.drawImage(sourceImg, (cw-dw)/2, (ch-dh)/2, dw, dh);
+
+  const cell = state.cellSize;
+  cols = Math.ceil(cw/cell); rows = Math.ceil(ch/cell);
+  const data = sctx.getImageData(0,0,cw,ch).data;
+  samples = new Array(cols*rows);
+  for(let gy=0; gy<rows; gy++){
+    for(let gx=0; gx<cols; gx++){
+      const x0=gx*cell, y0=gy*cell;
+      const x1=Math.min(cw,x0+cell), y1=Math.min(ch,y0+cell);
+      let r=0,g=0,b=0,n=0;
+      for(let y=y0;y<y1;y+=2){
+        for(let x=x0;x<x1;x+=2){
+          const i=(y*cw+x)*4;
+          r+=data[i]; g+=data[i+1]; b+=data[i+2]; n++;
+        }
+      }
+      if(n===0) n=1;
+      r/=n; g/=n; b/=n;
+      samples[gy*cols+gx] = {r,g,b,l:lum(r,g,b)};
+    }
+  }
+}
+
+/* ============== 마스크(freehand reveal) ============== */
+let paintMaskCanvas = document.createElement('canvas');
+let painting = false;
+function maskPos(e){
+  const rect = cv.getBoundingClientRect();
+  const x = (e.clientX-rect.left) * (cv.width/rect.width);
+  const y = (e.clientY-rect.top) * (cv.height/rect.height);
+  return {x,y};
+}
+cv.addEventListener('pointerdown', e=>{
+  if(state.mask.enabled){ painting = true; lastPaintPos = null; paintAt(e); }
+  else if(state.lights.enabled){ addLightAt(e); }
+});
+window.addEventListener('pointerup', ()=> { painting=false; lastPaintPos = null; });
+cv.addEventListener('pointermove', e=>{ if(painting) paintAt(e); });
+let lastPaintPos = null;
+function paintAt(e){
+  const {x,y} = maskPos(e);
+  const mctx = paintMaskCanvas.getContext('2d');
+  const r = state.mask.brushSize;
+  mctx.fillStyle = 'rgba(255,255,255,1)';
+  if(lastPaintPos){
+    const dist = Math.hypot(x-lastPaintPos.x, y-lastPaintPos.y);
+    const steps = Math.max(1, Math.ceil(dist/Math.max(2,r*0.5)));
+    for(let i=0;i<=steps;i++){
+      const t = i/steps;
+      const ix = lastPaintPos.x + (x-lastPaintPos.x)*t;
+      const iy = lastPaintPos.y + (y-lastPaintPos.y)*t;
+      mctx.fillRect(ix - r/2, iy - r/2, r, r); // 부드러운 원형 대신 각진 사각 브러시, 각지게 이어붙임
+    }
+  } else {
+    mctx.fillRect(x - r/2, y - r/2, r, r);
+  }
+  lastPaintPos = {x,y};
+}
+document.getElementById('clearMask').addEventListener('click', ()=>{
+  paintMaskCanvas.getContext('2d').clearRect(0,0,paintMaskCanvas.width,paintMaskCanvas.height);
+});
+function addLightAt(e){
+  if(state.lights.points.length >= 6) return;
+  const {x,y} = maskPos(e);
+  state.lights.points.push({x:x/cv.width, y:y/cv.height, radius:0.18, intensity:70});
+}
+document.getElementById('clearLights').addEventListener('click', ()=>{ state.lights.points = []; });
+
+/* ============== 애니메이션 위상 ============== */
+function animMod(gx, gy){
+  if(!state.animated) return {scale:1, alpha:1, ox:0, oy:0};
+  const speed = state.animSpeed.enabled ? state.animSpeed.intensity/100 : 0;
+  const mag   = state.animIntensity.enabled ? state.animIntensity.intensity/100 : 0;
+  const t = performance.now()/1000 * speed * 1.4;
+  const nx = gx/Math.max(1,cols), ny = gy/Math.max(1,rows);
+  switch(state.animStyle){
+    case 'wave': {
+      const p = Math.sin(t*2 + nx*8 + ny*3);
+      return {scale:1+p*0.35*mag, alpha:1, ox:0, oy:0};
+    }
+    case 'pulse': {
+      const p = (Math.sin(t*2.2)+1)/2;
+      return {scale:1+ (p-0.5)*0.6*mag, alpha:1, ox:0, oy:0};
+    }
+    case 'shimmer': {
+      const p = hash2(gx, Math.floor(t*6+gy));
+      return {scale:1, alpha: 1-(p*0.8*mag), ox:0, oy:0};
+    }
+    case 'ripple': {
+      const cx=cols/2, cy=rows/2;
+      const d = Math.hypot(nx-cx/cols, ny-cy/rows);
+      const p = Math.sin(d*18 - t*4);
+      return {scale:1+p*0.4*mag, alpha:1, ox:0, oy:0};
+    }
+    case 'flicker': {
+      const p = hash2(gx*7+1, gy*13+Math.floor(t*10));
+      return {scale:1, alpha: p < mag*0.5 ? 0.15 : 1, ox:0, oy:0};
+    }
+    default: return {scale:1, alpha:1, ox:0, oy:0};
+  }
+}
+
+/* ============== 셀 도형 렌더러 ============== */
+function edgeFactor(gx,gy){
+  if(state.edgeEmphasis<=0) return 0;
+  const idx=(x,y)=> samples[clamp(y,0,rows-1)*cols+clamp(x,0,cols-1)].l;
+  const c = idx(gx,gy);
+  const nEdge = Math.abs(c-idx(gx+1,gy)) + Math.abs(c-idx(gx-1,gy)) + Math.abs(c-idx(gx,gy+1)) + Math.abs(c-idx(gx,gy-1));
+  return clamp(nEdge*2,0,1) * (state.edgeEmphasis/100);
+}
+
+function drawGlyph(ch, cx, cy, size, color, alpha){
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = color;
+  ctx.font = `${Math.max(4,size)}px monospace`;
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'middle';
+  ctx.fillText(ch, cx, cy);
+  ctx.restore();
+}
+function rgba(r,g,b,a){ return `rgba(${r|0},${g|0},${b|0},${a})`; }
+
+function drawCell(gx, gy){
+  const s = samples[gy*cols+gx];
+  if(!s) return;
+  const cell = state.cellSize;
+  const x0 = gx*cell, y0 = gy*cell;
+  const cx = x0+cell/2, cy = y0+cell/2;
+
+  // coverage: 안정적인 스킵
+  if(hash2(gx,gy) > state.coverage/100) return;
+
+  let l = state.invert ? 1-s.l : s.l;
+  const edge = edgeFactor(gx,gy);
+  l = clamp(l + edge*0.4, 0, 1);
+
+  // contrast를 셀 채움 여부 자체에도 반영 -> 어두운 부분은 완전히 비워서(까맣게) 날림
+  const cf = state.contrast/100;
+  l = clamp((l-0.5)*cf + 0.5, 0, 1);
+
+  const am = animMod(gx,gy);
+  // 애니메이션이 크기뿐 아니라 밝기(=채움 정도)에도 영향을 줘서 dither 등 모든 렌더모드에서 보이게 함
+  l = clamp(l + (am.scale-1), 0, 1);
+  const size = cell * clamp(am.scale,0.15,1.8);
+  const alpha = clamp(am.alpha,0,1);
+  const color = `rgb(${s.r|0},${s.g|0},${s.b|0})`;
+
+  if(l <= 0.001){ return; } // 완전히 까맣게 날린 부분은 아무것도 그리지 않음
+
+  ctx.save();
+  ctx.globalCompositeOperation = state.styleBlend;
+
+  switch(state.renderMode){
+    case 'characters': {
+      const set = getCharset();
+      const idx = clamp(Math.floor(l*(set.length-1)),0,set.length-1);
+      drawGlyph(set[idx], cx, cy, size, color, alpha);
+      break;
+    }
+    case 'hexdump': {
+      const hexChars='0123456789abcdef';
+      const idx = clamp(Math.floor(l*15),0,15);
+      drawGlyph(hexChars[idx], cx, cy, size, color, alpha*0.95);
+      break;
+    }
+    case 'braille': {
+      const dots='⠀⠂⠆⠖⠶⠷⠿⡿⣿';
+      const idx = clamp(Math.floor(l*(dots.length-1)),0,dots.length-1);
+      drawGlyph(dots[idx], cx, cy, size*1.3, color, alpha);
+      break;
+    }
+    case 'matrix': {
+      const t = performance.now()/1000;
+      const speed = state.animSpeed.enabled? state.animSpeed.intensity/100:0.5;
+      const glyphs = CHARSETS.matrix;
+      const flicker = hash2(gx, gy + Math.floor(t*4*Math.max(0.2,speed)));
+      const ch = glyphs[Math.floor(flicker*glyphs.length)] || ' ';
+      drawGlyph(ch, cx, cy, size, `rgba(60,255,120,${0.35+l*0.65})`, alpha);
+      break;
+    }
+    case 'disco': {
+      const t=performance.now()/1000;
+      const hue = (t*80 + gx*20 + gy*15) % 360;
+      ctx.fillStyle = `hsla(${hue},90%,60%,${0.25+l*0.75*alpha})`;
+      ctx.beginPath(); ctx.arc(cx,cy,size*0.42,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'dither': {
+      // 4x4 Bayer 순서 디더 + density 노이즈 (l이 0에 가까우면 아예 안 그려서 진짜 까맣게 날아감)
+      const bayer=[
+        [0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]
+      ];
+      const sub = Math.max(2, Math.floor(cell/4));
+      const noiseAmt = (state.density/100)*0.1;
+      for(let iy=0; iy<4; iy++){
+        for(let ix=0; ix<4; ix++){
+          const threshold = (bayer[iy][ix]+0.5)/16;
+          const noise = (hash2(gx*4+ix, gy*4+iy) - 0.5) * noiseAmt;
+          const li = clamp(l + noise, 0, 1);
+          if(li > threshold){
+            ctx.fillStyle = color;
+            ctx.globalAlpha = alpha;
+            ctx.fillRect(x0+ix*sub, y0+iy*sub, sub-0.5, sub-0.5);
+          }
+        }
+      }
+      break;
+    }
+    case 'mosaic':
+    case 'pixel': {
+      const pad = state.renderMode==='mosaic' ? Math.max(0.5,cell*0.06) : 0;
+      ctx.fillStyle = color; ctx.globalAlpha = alpha*l;
+      ctx.fillRect(x0+pad, y0+pad, cell-pad*2, cell-pad*2);
+      break;
+    }
+    case 'dots': {
+      ctx.fillStyle = color; ctx.globalAlpha = alpha;
+      ctx.beginPath(); ctx.arc(cx,cy, size*0.5*l, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'bubbles': {
+      const r = size*0.5*(0.3+l*0.7);
+      const grad = ctx.createRadialGradient(cx-r*0.3,cy-r*0.3,r*0.1,cx,cy,r);
+      grad.addColorStop(0,'rgba(255,255,255,0.9)');
+      grad.addColorStop(0.3, color);
+      grad.addColorStop(1, rgba(s.r,s.g,s.b,0.15));
+      ctx.globalAlpha = alpha;
+      ctx.fillStyle = grad;
+      ctx.beginPath(); ctx.arc(cx,cy,r,0,Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'stars': {
+      drawStar(cx,cy, size*0.55*l, color, alpha);
+      break;
+    }
+    case 'hearts': {
+      drawHeart(cx,cy, size*0.5*l, color, alpha);
+      break;
+    }
+    case 'rings': {
+      ctx.strokeStyle = color; ctx.globalAlpha=alpha; ctx.lineWidth = Math.max(1, cell*0.14*l);
+      ctx.beginPath(); ctx.arc(cx,cy, size*0.42, 0, Math.PI*2); ctx.stroke();
+      break;
+    }
+    case 'cross': {
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha; ctx.lineWidth=Math.max(1,cell*0.22*l);
+      const r=size*0.4;
+      ctx.beginPath(); ctx.moveTo(cx-r,cy); ctx.lineTo(cx+r,cy);
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx,cy+r); ctx.stroke();
+      break;
+    }
+    case 'diamond': {
+      const r=size*0.5*l;
+      ctx.fillStyle=color; ctx.globalAlpha=alpha;
+      ctx.beginPath();
+      ctx.moveTo(cx,cy-r); ctx.lineTo(cx+r,cy); ctx.lineTo(cx,cy+r); ctx.lineTo(cx-r,cy);
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'hexagons': {
+      drawHex(cx,cy, size*0.55*(0.3+l*0.7), color, alpha);
+      break;
+    }
+    case 'triangles': {
+      const r = size*0.55;
+      ctx.fillStyle=color; ctx.globalAlpha=alpha*(0.3+l*0.7);
+      ctx.beginPath();
+      if((gx+gy)%2===0){ ctx.moveTo(x0,y0); ctx.lineTo(x0+cell,y0); ctx.lineTo(x0,y0+cell); }
+      else { ctx.moveTo(x0+cell,y0); ctx.lineTo(x0+cell,y0+cell); ctx.lineTo(x0,y0+cell); }
+      ctx.closePath(); ctx.fill();
+      break;
+    }
+    case 'voxel': {
+      const h = size*0.55*l;
+      const top=lighten(s,0.25), side=lighten(s,-0.2);
+      ctx.globalAlpha=alpha;
+      ctx.fillStyle = top; ctx.fillRect(x0+1,y0+cell-h,cell-2,h*0.5);
+      ctx.fillStyle = side; ctx.fillRect(x0+1,y0+cell-h*0.5,cell-2,h*0.5);
+      break;
+    }
+    case 'lego': {
+      ctx.globalAlpha=alpha; ctx.fillStyle=color;
+      const pad=cell*0.08;
+      roundRect(ctx, x0+pad, y0+pad, cell-pad*2, cell-pad*2, cell*0.15); ctx.fill();
+      ctx.fillStyle='rgba(255,255,255,0.35)';
+      ctx.beginPath(); ctx.arc(cx,cy, cell*0.16, 0, Math.PI*2); ctx.fill();
+      break;
+    }
+    case 'lines': {
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha; ctx.lineWidth=Math.max(1,cell*0.5*l);
+      ctx.beginPath(); ctx.moveTo(x0,cy); ctx.lineTo(x0+cell,cy); ctx.stroke();
+      break;
+    }
+    case 'diagonal': {
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha; ctx.lineWidth=Math.max(1,cell*0.35*l);
+      ctx.beginPath(); ctx.moveTo(x0,y0); ctx.lineTo(x0+cell,y0+cell); ctx.stroke();
+      break;
+    }
+    case 'hatch': {
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha*0.8;
+      const lines = 1+Math.round(l*4*(0.3+state.density/100));
+      ctx.lineWidth=1;
+      for(let i=0;i<lines;i++){
+        const off=(i-lines/2)*cell/ (lines+1);
+        ctx.beginPath(); ctx.moveTo(x0,y0+cell/2+off); ctx.lineTo(x0+cell,y0-off+cell/2); ctx.stroke();
+      }
+      break;
+    }
+    case 'contour': {
+      const band = Math.floor(l*5);
+      ctx.strokeStyle=color; ctx.globalAlpha=alpha*0.85; ctx.lineWidth=1.4;
+      ctx.beginPath(); ctx.arc(cx,cy, cell*0.15+band*cell*0.09, 0, Math.PI*1.4); ctx.stroke();
+      break;
+    }
+    case 'halfblocks': {
+      const top = samples[gy*cols+gx];
+      const bot = samples[Math.min(rows-1,gy)*cols+gx];
+      ctx.globalAlpha=alpha;
+      ctx.fillStyle = `rgb(${top.r|0},${top.g|0},${top.b|0})`;
+      ctx.fillRect(x0,y0,cell,cell/2);
+      ctx.fillStyle = `rgb(${bot.r*0.7|0},${bot.g*0.7|0},${bot.b*0.7|0})`;
+      ctx.fillRect(x0,y0+cell/2,cell,cell/2);
+      break;
+    }
+    case 'mixed': {
+      const pick = Math.floor(hash2(gx,gy)*3);
+      ctx.fillStyle=color; ctx.globalAlpha=alpha;
+      if(pick===0){ ctx.beginPath(); ctx.arc(cx,cy,size*0.4*l,0,Math.PI*2); ctx.fill(); }
+      else if(pick===1){ ctx.fillRect(x0+2,y0+2,cell-4,cell-4); }
+      else { ctx.beginPath(); ctx.moveTo(cx,cy-size*0.4); ctx.lineTo(cx+size*0.4,cy); ctx.lineTo(cx,cy+size*0.4); ctx.lineTo(cx-size*0.4,cy); ctx.closePath(); ctx.fill(); }
+      break;
+    }
+    default: {
+      ctx.fillStyle=color; ctx.globalAlpha=alpha;
+      ctx.fillRect(x0,y0,cell,cell);
+    }
+  }
+  ctx.restore();
+}
+
+function lighten(s, amt){
+  const r=clamp(s.r+255*amt,0,255), g=clamp(s.g+255*amt,0,255), b=clamp(s.b+255*amt,0,255);
+  return `rgb(${r|0},${g|0},${b|0})`;
+}
+function roundRect(ctx,x,y,w,h,r){
+  ctx.beginPath();
+  ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r);
+  ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath();
+}
+function drawStar(cx,cy,r,color,alpha){
+  ctx.fillStyle=color; ctx.globalAlpha=alpha;
+  ctx.beginPath();
+  for(let i=0;i<10;i++){
+    const ang = Math.PI/5*i - Math.PI/2;
+    const rr = i%2===0? r : r*0.42;
+    const x=cx+Math.cos(ang)*rr, y=cy+Math.sin(ang)*rr;
+    i===0? ctx.moveTo(x,y): ctx.lineTo(x,y);
+  }
+  ctx.closePath(); ctx.fill();
+}
+function drawHeart(cx,cy,r,color,alpha){
+  ctx.fillStyle=color; ctx.globalAlpha=alpha;
+  ctx.beginPath();
+  ctx.moveTo(cx,cy+r*0.6);
+  ctx.bezierCurveTo(cx+r*1.3,cy-r*0.4, cx+r*0.4,cy-r*1.2, cx,cy-r*0.4);
+  ctx.bezierCurveTo(cx-r*0.4,cy-r*1.2, cx-r*1.3,cy-r*0.4, cx,cy+r*0.6);
+  ctx.closePath(); ctx.fill();
+}
+function drawHex(cx,cy,r,color,alpha){
+  ctx.strokeStyle=color; ctx.fillStyle=color; ctx.globalAlpha=alpha*0.9;
+  ctx.beginPath();
+  for(let i=0;i<6;i++){
+    const ang=Math.PI/3*i;
+    const x=cx+Math.cos(ang)*r, y=cy+Math.sin(ang)*r;
+    i===0? ctx.moveTo(x,y): ctx.lineTo(x,y);
+  }
+  ctx.closePath(); ctx.fill();
+}
+
+/* ============== 배경 ============== */
+function drawBackground(){
+  const W=cv.width,H=cv.height;
+  if(state.bgMode==='none'){ ctx.clearRect(0,0,W,H); return; }
+  ctx.save();
+  ctx.globalAlpha = state.bgOpacity/100;
+  if(state.bgMode==='color'){
+    ctx.fillStyle = state.bgColor; ctx.fillRect(0,0,W,H);
+  } else if(state.bgMode==='photo'){
+    ctx.drawImage(srcCanvas,0,0);
+  } else if(state.bgMode==='blur'){
+    ctx.filter = `blur(${state.bgBlur}px)`;
+    ctx.drawImage(srcCanvas,0,0);
+    ctx.filter='none';
+  }
+  ctx.restore();
+}
+
+/* ============== 색보정 + 블러 (전체 캔버스 후처리) ============== */
+function applyGrading(){
+  const W=cv.width,H=cv.height;
+  const tmp = document.createElement('canvas'); tmp.width=W; tmp.height=H;
+  const tctx = tmp.getContext('2d');
+  const b = 100 + state.brightness;                 // css brightness() 100=원본
+  tctx.filter = `brightness(${b}%) contrast(${state.contrast}%) saturate(${state.saturation}%) grayscale(${state.grayscale}%)`;
+  tctx.drawImage(cv,0,0);
+  tctx.filter='none';
+
+  if(state.tintOpacity>0){
+    tctx.globalCompositeOperation = state.overlayBlend;
+    tctx.globalAlpha = state.tintOpacity/100;
+    tctx.fillStyle = state.tint;
+    tctx.fillRect(0,0,W,H);
+    tctx.globalCompositeOperation='source-over';
+    tctx.globalAlpha=1;
+  }
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(tmp,0,0);
+}
+
+function applyBlur(){
+  if(state.blurType==='off' || state.blurAmount<=0) return;
+  const W=cv.width,H=cv.height;
+  const sharp = document.createElement('canvas'); sharp.width=W; sharp.height=H;
+  sharp.getContext('2d').drawImage(cv,0,0);
+
+  if(state.blurType==='directional'){
+    const steps=10, amt=state.blurAmount/4;
+    const ang = state.blurAngle*Math.PI/180;
+    const dx=Math.cos(ang), dy=Math.sin(ang);
+    ctx.clearRect(0,0,W,H);
+    for(let i=-steps;i<=steps;i++){
+      if(!state.directionalBothSides && i<0) continue;
+      const t=i/steps;
+      ctx.globalAlpha = 1/(steps*(state.directionalBothSides?2:1)+1);
+      ctx.drawImage(sharp, dx*t*amt, dy*t*amt);
+    }
+    ctx.globalAlpha=1;
+    return;
+  }
+
+  const blurred = document.createElement('canvas'); blurred.width=W; blurred.height=H;
+  const bctx = blurred.getContext('2d');
+  bctx.filter = `blur(${state.blurAmount}px)`;
+  bctx.drawImage(sharp,0,0);
+  bctx.filter='none';
+
+  if(state.blurType==='gaussian'){
+    ctx.clearRect(0,0,W,H); ctx.drawImage(blurred,0,0);
+    return;
+  }
+
+  // 공간적으로 변하는 블러: tilt / lens / progressive
+  const mask = document.createElement('canvas'); mask.width=W; mask.height=H;
+  const mctx = mask.getContext('2d');
+  const feather = Math.max(1,state.tiltFeather);
+
+  if(state.blurType==='tilt'){
+    const grad = mctx.createLinearGradient(0, state.tiltPosition/100*H - state.tiltFocus/100*H - feather/100*H, 0, state.tiltPosition/100*H - state.tiltFocus/100*H);
+    // build via manual pixel-free approach using multiple gradient stops (top->sharp band->bottom)
+  }
+  // 간단한 구현: 세그먼트별 선형 그라디언트로 "선명도(=sharp 비중)" 맵 생성
+  function sharpAmountAt(nx, ny){
+    if(state.blurType==='tilt'){
+      const posY = state.tiltPosition/100;
+      const focus = state.tiltFocus/100;
+      const feath = Math.max(0.01, state.tiltFeather/100);
+      const d = Math.abs(ny - posY);
+      if(d<=focus) return 1;
+      return clamp(1-(d-focus)/feath, 0, 1);
+    }
+    if(state.blurType==='lens'){
+      const cxp=state.blurCenterX/100, cyp=state.blurCenterY/100;
+      const focus = state.lensFocus/100;
+      const feath = Math.max(0.01, state.tiltFeather/100);
+      const d = Math.hypot(nx-cxp, ny-cyp);
+      if(d<=focus) return 1;
+      return clamp(1-(d-focus)/feath, 0, 1);
+    }
+    if(state.blurType==='progressive'){
+      let p = state.progressivePosition/100;
+      let v = state.progressiveReverse ? (1-nx) : nx;
+      const feath=0.25;
+      const d = v - p;
+      if(d<=0) return 1;
+      return clamp(1-d/feath,0,1);
+    }
+    return 1;
+  }
+  // sharpAmount를 그리드로 근사해서 그라디언트 이미지 생성 (성능 위해 저해상도 후 스케일)
+  const gw=32, gh=32;
+  const gCanvas = document.createElement('canvas'); gCanvas.width=gw; gCanvas.height=gh;
+  const gctx = gCanvas.getContext('2d');
+  const gid = gctx.createImageData(gw,gh);
+  for(let y=0;y<gh;y++){
+    for(let x=0;x<gw;x++){
+      const amt = sharpAmountAt(x/(gw-1), y/(gh-1));
+      const i=(y*gw+x)*4;
+      gid.data[i]=255; gid.data[i+1]=255; gid.data[i+2]=255; gid.data[i+3]=Math.round(amt*255);
+    }
+  }
+  gctx.putImageData(gid,0,0);
+  mctx.imageSmoothingEnabled = true;
+  mctx.drawImage(gCanvas,0,0,gw,gh,0,0,W,H);
+
+  const sharpMasked = document.createElement('canvas'); sharpMasked.width=W; sharpMasked.height=H;
+  const smctx = sharpMasked.getContext('2d');
+  smctx.drawImage(sharp,0,0);
+  smctx.globalCompositeOperation='destination-in';
+  smctx.drawImage(mask,0,0);
+
+  ctx.clearRect(0,0,W,H);
+  ctx.drawImage(blurred,0,0);
+  ctx.drawImage(sharpMasked,0,0);
+}
+
+/* ============== Post FX ============== */
+let grainPattern=null;
+function applyPfx(){
+  const W=cv.width,H=cv.height, P=state.pfx;
+  if(P.scanLines.enabled){
+    const inten=P.scanLines.intensity/100;
+    ctx.save(); ctx.globalAlpha = inten*0.5; ctx.fillStyle='#000';
+    for(let y=0;y<H;y+=3) ctx.fillRect(0,y,W,1);
+    ctx.restore();
+  }
+  if(P.vignette.enabled){
+    const inten=P.vignette.intensity/100;
+    const g = ctx.createRadialGradient(W/2,H/2,Math.min(W,H)*0.3, W/2,H/2, Math.hypot(W,H)/1.4);
+    g.addColorStop(0,'rgba(0,0,0,0)');
+    g.addColorStop(1,`rgba(0,0,0,${inten})`);
+    ctx.save(); ctx.fillStyle=g; ctx.fillRect(0,0,W,H); ctx.restore();
+  }
+  if(P.bloom.enabled){
+    const inten=P.bloom.intensity/100;
+    const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+    const tctx=tmp.getContext('2d');
+    tctx.filter=`blur(${8+inten*20}px) brightness(140%)`;
+    tctx.drawImage(cv,0,0);
+    ctx.save(); ctx.globalCompositeOperation='lighter'; ctx.globalAlpha=inten*0.7;
+    ctx.drawImage(tmp,0,0); ctx.restore();
+  }
+  if(P.chromatic.enabled){
+    const inten=P.chromatic.intensity/100;
+    const off = inten*6;
+    const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+    tmp.getContext('2d').drawImage(cv,0,0);
+    ctx.save(); ctx.globalCompositeOperation='screen'; ctx.globalAlpha=0.55;
+    ctx.drawImage(tmp,-off,0);
+    ctx.drawImage(tmp,off,0);
+    ctx.restore();
+  }
+  if(P.filmGrain.enabled){
+    const inten=P.filmGrain.intensity/100;
+    if(!grainPattern || grainPattern._t !== Math.floor(performance.now()/60)){
+      const n=64;
+      const g=document.createElement('canvas'); g.width=n; g.height=n;
+      const gctx=g.getContext('2d');
+      const id=gctx.createImageData(n,n);
+      for(let i=0;i<id.data.length;i+=4){
+        const v=Math.random()*255;
+        id.data[i]=v; id.data[i+1]=v; id.data[i+2]=v; id.data[i+3]=255;
+      }
+      gctx.putImageData(id,0,0);
+      grainPattern = ctx.createPattern(g,'repeat');
+      grainPattern._t = Math.floor(performance.now()/60);
+    }
+    ctx.save(); ctx.globalAlpha=inten*0.35; ctx.globalCompositeOperation='overlay';
+    ctx.fillStyle=grainPattern; ctx.fillRect(0,0,W,H);
+    ctx.restore();
+  }
+  if(P.glitch.enabled){
+    const inten=P.glitch.intensity/100;
+    if(Math.random() < 0.5*inten){
+      const tmp=document.createElement('canvas'); tmp.width=W; tmp.height=H;
+      tmp.getContext('2d').drawImage(cv,0,0);
+      const sliceH = 4+Math.random()*20;
+      const y = Math.random()*H;
+      const dx = (Math.random()-0.5)*40*inten;
+      ctx.drawImage(tmp, 0, y, W, sliceH, dx, y, W, sliceH);
+    }
+  }
+  if(P.halftone.enabled){
+    const inten=P.halftone.intensity/100;
+    ctx.save(); ctx.globalAlpha=inten*0.5; ctx.globalCompositeOperation='multiply';
+    const step=6;
+    for(let y=0;y<H;y+=step){
+      for(let x=0;x<W;x+=step){
+        ctx.beginPath(); ctx.fillStyle='#000';
+        ctx.arc(x,y, step*0.35, 0, Math.PI*2); ctx.fill();
+      }
+    }
+    ctx.restore();
+  }
+  if(P.pixelate.enabled){
+    const inten=P.pixelate.intensity/100;
+    const block = Math.max(2, Math.round(2+inten*22));
+    const sw=Math.max(1,Math.round(W/block)), sh=Math.max(1,Math.round(H/block));
+    const tmp=document.createElement('canvas'); tmp.width=sw; tmp.height=sh;
+    const tctx=tmp.getContext('2d');
+    tctx.imageSmoothingEnabled=true;
+    tctx.drawImage(cv,0,0,sw,sh);
+    ctx.imageSmoothingEnabled=false;
+    ctx.clearRect(0,0,W,H);
+    ctx.drawImage(tmp,0,0,sw,sh,0,0,W,H);
+    ctx.imageSmoothingEnabled=true;
+  }
+  if(P.filmDust.enabled){
+    const inten=P.filmDust.intensity/100;
+    ctx.save(); ctx.globalAlpha=0.5;
+    const n = Math.round(inten*40);
+    for(let i=0;i<n;i++){
+      ctx.fillStyle = Math.random()<0.5? '#fff':'#000';
+      const x=Math.random()*W, y=Math.random()*H, r=Math.random()*1.5+0.3;
+      ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+/* ============== Lights ============== */
+function applyLights(){
+  if(!state.lights.enabled) return;
+  const W=cv.width,H=cv.height;
+  ctx.save(); ctx.globalCompositeOperation='lighter';
+  for(const p of state.lights.points){
+    const x=p.x*W, y=p.y*H, r=p.radius*Math.max(W,H);
+    const g = ctx.createRadialGradient(x,y,0,x,y,r);
+    g.addColorStop(0, `rgba(255,255,255,${(p.intensity/100)*0.9})`);
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle=g; ctx.beginPath(); ctx.arc(x,y,r,0,Math.PI*2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+/* ============== Mask reveal ============== */
+function applyMask(){
+  if(!state.mask.enabled || !srcCanvas) return;
+  const W=cv.width,H=cv.height;
+  const eff = document.createElement('canvas'); eff.width=W; eff.height=H;
+  const ectx = eff.getContext('2d');
+  if(state.mask.invert){
+    ectx.fillStyle='#fff'; ectx.fillRect(0,0,W,H);
+    ectx.globalCompositeOperation='destination-out';
+    ectx.drawImage(paintMaskCanvas,0,0);
+  } else {
+    ectx.drawImage(paintMaskCanvas,0,0);
+  }
+  const photoMasked = document.createElement('canvas'); photoMasked.width=W; photoMasked.height=H;
+  const pctx = photoMasked.getContext('2d');
+  pctx.drawImage(srcCanvas,0,0);
+  pctx.globalCompositeOperation='destination-in';
+  pctx.drawImage(eff,0,0);
+
+  ctx.drawImage(photoMasked,0,0);
+
+  if(state.mask.showOverlay){
+    ctx.save(); ctx.globalAlpha=0.28; ctx.globalCompositeOperation='screen';
+    ctx.fillStyle='#00e0ff';
+    ctx.drawImage(paintMaskCanvas,0,0);
+    ctx.restore();
+  }
+}
+
+/* ============== 메인 루프 ============== */
+function frame(){
+  if(sourceImg && samples){
+    drawBackground();
+    for(let gy=0; gy<rows; gy++) for(let gx=0; gx<cols; gx++) drawCell(gx,gy);
+    applyGrading();
+    applyBlur();
+    applyPfx();
+    applyLights();
+    applyMask();
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+/* ============== Post FX 패널 자동 생성 ============== */
+const PFX_LABELS = {
+  scanLines:'scanLines', vignette:'vignette', bloom:'bloom', chromatic:'chromatic',
+  filmGrain:'filmGrain', glitch:'glitch', halftone:'halftone', pixelate:'pixelate', filmDust:'filmDust'
+};
+const pfxList = document.getElementById('pfxList');
+Object.keys(PFX_LABELS).forEach(key=>{
+  const row = document.createElement('div');
+  row.className='pfxRow';
+  row.innerHTML = `
+    <input type="checkbox" data-path="pfx.${key}.enabled">
+    <label>${PFX_LABELS[key]}</label>
+    <input type="range" min="0" max="100" step="1" data-path="pfx.${key}.intensity" data-num="1">
+    <span class="val" data-show="pfx.${key}.intensity"></span>
+  `;
+  pfxList.appendChild(row);
+});
+
+/* ============== 상태 바인딩 ============== */
+function getPath(obj, path){
+  return path.split('.').reduce((o,k)=> (o==null?o:o[k]), obj);
+}
+function setPath(obj, path, val){
+  const parts = path.split('.');
+  let o = obj;
+  for(let i=0;i<parts.length-1;i++) o = o[parts[i]];
+  o[parts[parts.length-1]] = val;
+}
+function syncUIFromState(){
+  panel.querySelectorAll('[data-path]').forEach(el=>{
+    const path = el.dataset.path;
+    const v = getPath(state, path);
+    if(v===undefined) return;
+    if(el.type==='checkbox') el.checked = !!v;
+    else el.value = v;
+  });
+  panel.querySelectorAll('[data-show]').forEach(el=>{
+    const v = getPath(state, el.dataset.show);
+    el.textContent = (v!==undefined) ? v : '';
+  });
+}
+panel.addEventListener('input', e=>{
+  const el = e.target;
+  const path = el.dataset.path;
+  if(!path) return;
+  let val;
+  if(el.type==='checkbox') val = el.checked;
+  else if(el.dataset.num || el.type==='range') val = parseFloat(el.value);
+  else val = el.value;
+  setPath(state, path, val);
+  const show = panel.querySelector(`[data-show="${path}"]`);
+  if(show) show.textContent = val;
+  if(path==='cellSize') rebuildSamples();
+});
+syncUIFromState();
+
+/* ============== 재생/일시정지 ============== */
+playBtn.addEventListener('click', ()=>{
+  state.animated = !state.animated;
+  playBtn.textContent = state.animated ? '⏸ 애니메이션' : '▶ 애니메이션';
+  const cb = panel.querySelector('[data-path="animated"]');
+  if(cb) cb.checked = state.animated;
+});
+</script>
+</body>
+</html>
