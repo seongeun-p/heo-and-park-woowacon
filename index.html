@@ -3,15 +3,11 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>Archive Gallery</title>
+<title>허앤박 우아콘 갤러리</title>
 <style>
   :root {
-    --bg: #0f1115;
-    --card-bg: #171a21;
-    --card-border: #2a2e38;
-    --text: #e8eaed;
-    --text-dim: #9aa0aa;
-    --accent: #6ea8fe;
+    --bg: #000;
+    --text: #ffffff;
   }
   * { box-sizing: border-box; }
   body {
@@ -21,72 +17,37 @@
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Noto Sans KR", sans-serif;
   }
   header {
-    padding: 40px 24px 16px;
-    max-width: 1200px;
-    margin: 0 auto;
+    padding: 56px 24px 32px;
+    text-align: center;
   }
   header h1 {
-    margin: 0 0 8px;
-    font-size: 28px;
-  }
-  header p {
     margin: 0;
-    color: var(--text-dim);
-    font-size: 14px;
-  }
-  #toolbar {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 0 24px 8px;
-    display: flex;
-    gap: 12px;
-    align-items: center;
-  }
-  #search {
-    flex: 1;
-    max-width: 320px;
-    padding: 8px 12px;
-    border-radius: 8px;
-    border: 1px solid var(--card-border);
-    background: var(--card-bg);
-    color: var(--text);
-    font-size: 14px;
-  }
-  #count {
-    color: var(--text-dim);
-    font-size: 13px;
+    font-size: 44px;
+    font-weight: 800;
+    letter-spacing: -0.5px;
   }
   main {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 16px 24px 64px;
+    padding: 0 24px 64px;
   }
   #grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-    gap: 20px;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
   }
   a.card {
     display: block;
     text-decoration: none;
     color: inherit;
-    background: var(--card-bg);
-    border: 1px solid var(--card-border);
-    border-radius: 12px;
+    background: #000;
+    border-radius: 0;
     overflow: hidden;
-    transition: transform 0.15s ease, border-color 0.15s ease;
-  }
-  a.card:hover {
-    transform: translateY(-3px);
-    border-color: var(--accent);
   }
   .thumb {
     position: relative;
     width: 100%;
     aspect-ratio: 16 / 10;
     overflow: hidden;
-    background: #0b0d11;
-    pointer-events: none;
+    background: #000;
   }
   .thumb iframe {
     position: absolute;
@@ -95,68 +56,42 @@
     width: 1280px;
     height: 800px;
     border: 0;
+    pointer-events: none;
     transform-origin: top left;
   }
-  .meta {
-    padding: 12px 14px 14px;
-  }
-  .meta .title {
-    font-size: 15px;
-    font-weight: 600;
-    margin: 0 0 6px;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  .meta .sub {
-    font-size: 12px;
-    color: var(--text-dim);
+  .overlay {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 45%;
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0) 0%, rgba(0, 0, 0, 0.75) 100%);
     display: flex;
-    justify-content: space-between;
-    gap: 8px;
+    align-items: flex-end;
+    padding: 12px 14px;
   }
-  .meta .desc {
-    font-size: 12.5px;
-    color: var(--text-dim);
-    margin: 6px 0 0;
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
+  .overlay .name {
+    color: #fff;
+    font-size: 14px;
+    font-weight: 600;
   }
-  #empty {
-    color: var(--text-dim);
-    padding: 60px 0;
-    text-align: center;
-    display: none;
-  }
-  #empty code {
-    background: var(--card-bg);
-    padding: 2px 6px;
-    border-radius: 4px;
+  @media (max-width: 900px) {
+    #grid { grid-template-columns: repeat(2, 1fr); }
+    header h1 { font-size: 32px; }
   }
 </style>
 </head>
 <body>
 <header>
-  <h1>📦 Archive Gallery</h1>
-  <p><code>entries/</code> 폴더에 html 파일을 추가하고 push하면 아래 갤러리에 자동으로 나타납니다.</p>
+  <h1>허앤박 우아콘 갤러리</h1>
 </header>
-<div id="toolbar">
-  <input id="search" type="text" placeholder="제목/작성자로 검색..." />
-  <span id="count"></span>
-</div>
 <main>
   <div id="grid"></div>
-  <div id="empty">아직 항목이 없어요. <code>entries/</code> 폴더에 html 파일을 추가해보세요.</div>
 </main>
 
 <script>
 async function main() {
   const grid = document.getElementById('grid');
-  const empty = document.getElementById('empty');
-  const search = document.getElementById('search');
-  const count = document.getElementById('count');
 
   let items = [];
   try {
@@ -169,11 +104,6 @@ async function main() {
 
   function render(list) {
     grid.innerHTML = '';
-    if (list.length === 0) {
-      empty.style.display = 'block';
-    } else {
-      empty.style.display = 'none';
-    }
     for (const item of list) {
       const a = document.createElement('a');
       a.className = 'card';
@@ -189,35 +119,18 @@ async function main() {
       iframe.setAttribute('sandbox', 'allow-scripts allow-same-origin');
       thumb.appendChild(iframe);
 
-      const meta = document.createElement('div');
-      meta.className = 'meta';
-      const title = document.createElement('p');
-      title.className = 'title';
-      title.textContent = item.title || item.file;
-      const sub = document.createElement('div');
-      sub.className = 'sub';
-      const author = document.createElement('span');
-      author.textContent = item.author || '';
-      const date = document.createElement('span');
-      date.textContent = item.date ? new Date(item.date).toLocaleDateString('ko-KR') : '';
-      sub.appendChild(author);
-      sub.appendChild(date);
-      meta.appendChild(title);
-      meta.appendChild(sub);
-      if (item.description) {
-        const desc = document.createElement('p');
-        desc.className = 'desc';
-        desc.textContent = item.description;
-        meta.appendChild(desc);
-      }
+      const overlay = document.createElement('div');
+      overlay.className = 'overlay';
+      const name = document.createElement('span');
+      name.className = 'name';
+      name.textContent = item.author || '';
+      overlay.appendChild(name);
+      thumb.appendChild(overlay);
 
       a.appendChild(thumb);
-      a.appendChild(meta);
       grid.appendChild(a);
     }
-    count.textContent = list.length + '개';
 
-    // scale thumbnails to fit box after layout
     requestAnimationFrame(() => {
       document.querySelectorAll('.thumb').forEach(box => {
         const iframe = box.querySelector('iframe');
@@ -228,22 +141,7 @@ async function main() {
   }
 
   render(items);
-  window.addEventListener('resize', () => render(currentList()));
-
-  let currentQuery = '';
-  function currentList() {
-    if (!currentQuery) return items;
-    const q = currentQuery.toLowerCase();
-    return items.filter(it =>
-      (it.title || '').toLowerCase().includes(q) ||
-      (it.author || '').toLowerCase().includes(q)
-    );
-  }
-
-  search.addEventListener('input', () => {
-    currentQuery = search.value.trim();
-    render(currentList());
-  });
+  window.addEventListener('resize', () => render(items));
 }
 
 main();
