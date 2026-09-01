@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Squares — Magnetic Path</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { overflow: hidden; background: #fff; cursor: crosshair; }
+    canvas { display: block; }
+    #panel {
+      position: fixed; top: 14px; left: 14px;
+      background: rgba(255,255,255,0.85); color: #222;
+      padding: 12px 14px; border-radius: 8px;
+      font: 12px/1.5 -apple-system, sans-serif; min-width: 240px;
+      border: 1px solid #ddd; z-index: 10;
+    }
+    #panel label { display:block; margin-top:8px; color:#666; }
+    #panel input[type=range]{ width:100%; }
+    #panel .v { float:right; color:#000; }
+    #panel .hint { margin-top:10px; color:#999; font-size:11px; }
+    #panel .row { margin-top:10px; display:flex; gap:6px; }
+    #panel button {
+      flex:1; padding:6px 4px; border:1px solid #ccc; background:#fff;
+      border-radius:6px; cursor:pointer; font-size:11px; color:#333;
+    }
+    #panel button:hover { background:#f2f2f2; }
+    #panel button.on { background:#111; color:#fff; border-color:#111; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <strong>Squares — 마우스로 길 밀어내기</strong>
+  <label>사각형 크기 <span class="v" id="vSize">12</span></label>
+  <input type="range" id="size" min="4" max="30" step="1" value="12">
+  <label>간격 <span class="v" id="vGap">6</span></label>
+  <input type="range" id="gap" min="0" max="30" step="1" value="6">
+  <label>각도 삐뚤 <span class="v" id="vRot">10</span></label>
+  <input type="range" id="rot" min="0" max="45" step="1" value="10">
+  <label>지글 범위 <span class="v" id="vJig">1.5</span></label>
+  <input type="range" id="jig" min="0" max="10" step="0.5" value="1.5">
+  <label>자석 반경 <span class="v" id="vRad">200</span></label>
+  <input type="range" id="rad" min="30" max="800" step="5" value="200">
+  <label>밀어내는 힘 <span class="v" id="vForce">0.35</span></label>
+  <input type="range" id="force" min="0.05" max="1" step="0.05" value="0.35">
+  <label>복귀 탄성 <span class="v" id="vSpring">0.04</span></label>
+  <input type="range" id="spring" min="0" max="0.2" step="0.01" value="0.04">
+  <label>자동 재생 속도 <span class="v" id="vSpeed">1.0</span></label>
+  <input type="range" id="speed" min="0.2" max="3" step="0.1" value="1.0">
+  <div class="row">
+    <button id="btnAuto">자동 재생 ▶</button>
+    <button id="btnReset">리셋</button>
+  </div>
+  <div class="hint">
+    Space: 자동 재생 시작/정지<br>
+    커서가 mask의 길을 정밀하게 따라갑니다<br>
+    H: 패널 · R: 리셋
+  </div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+const P = { size: 12, gap: 6, rot: 10, jig: 1.5, rad: 200, force: 0.35, spring: 0.04, speed: 1.0 };
+let pendingRoad = [];  // 마무리 단계에서 서서히 밀어낼 길 네모 목록
+
+function makeRng(seed) {
+  return function () {
+    seed = (seed * 1103515245 + 12345) & 0x7fffffff;
+    return seed / 0x7fffffff;
+  };
+}
+
+// ─── mask.png 로드 (최종 길 모양) ─────────────────────────
+// 마스크의 "흰색(밝은)" 부분 = 최종적으로 뚫려야 할 길.
+let maskData = null, maskW = 0, maskH = 0, maskReady = false;
+
+const maskImg = new Image();
+maskImg.onload = () => {
+  try {
+    maskW = maskImg.naturalWidth;
+    maskH = maskImg.naturalHeight;
+    const mc = document.createElement('canvas');
+    mc.width = maskW; mc.height = maskH;
+    const mctx = mc.getContext('2d', { willReadFrequently: true });
+    mctx.drawImage(maskImg, 0, 0);
+    maskData = mctx.getImageData(0, 0, maskW, maskH).data;
+    maskReady = true;
+    buildPath();
+    build();
+  } catch (err) {}
+};
+maskImg.src = 'mask.png?' + Date.now();
+
+// 마스크 픽셀(mx,my)이 길(흰색)인지
+function maskIsRoadPixel(mx, my) {
+  if (mx < 0 || mx >= maskW || my < 0 || my >= maskH) return false;
+  const idx = (my * maskW + mx) * 4;
+  const brightness = maskData[idx];
+  const alpha = maskData[idx + 3];
+  return (alpha < 128) || (brightness > 128); // 흰색 또는 투명 = 길
+}
+
+// 화면 좌표가 마스크의 "길"(뚫려야 할 곳)인지
+function isRoad(x, y) {
+  if (!maskReady) return false;
+  const mx = Math.floor((x / W) * maskW);
+  const my = Math.floor((y / H) * maskH);
+  return maskIsRoadPixel(mx, my);
+}
+
+// ─── 마스크 흰 영역에서 정밀 경로 생성 ─────────────────────
+// 흰 픽셀들을 격자 샘플링 → 대각선 진행값(x+y) 밴드로 나눠
+// 각 밴드의 중심점을 이어 왼쪽위→오른쪽아래 경로를 만든다.
+let PATH = [];  // 화면 좌표 배열 [{x,y}, ...]
+
+function buildPath() {
+  PATH = [];
+  if (!maskReady) return;
+
+  // 흰 픽셀 수집 (샘플 간격은 마스크 해상도에 비례)
+  const stepPx = Math.max(2, Math.floor(Math.min(maskW, maskH) / 200));
+  const pts = [];
+  for (let my = 0; my < maskH; my += stepPx) {
+    for (let mx = 0; mx < maskW; mx += stepPx) {
+      if (maskIsRoadPixel(mx, my)) {
+        pts.push({ mx, my });
+      }
+    }
+  }
+  if (pts.length === 0) return;
+
+  // 대각선 진행 방향: 왼쪽위(작은 x+y) → 오른쪽아래(큰 x+y)
+  // 화면 비율에 맞춰 정규화한 진행값 사용
+  const diag = (p) => (p.mx / maskW) + (p.my / maskH); // 0~2
+  let minD = Infinity, maxD = -Infinity;
+  for (const p of pts) {
+    const d = diag(p);
+    if (d < minD) minD = d;
+    if (d > maxD) maxD = d;
+  }
+
+  // 진행값을 여러 밴드로 나눠 각 밴드 내 흰 픽셀의 무게중심을 경로점으로
+  const bands = 80;
+  const acc = Array.from({ length: bands }, () => ({ sx: 0, sy: 0, n: 0 }));
+  const range = (maxD - minD) || 1;
+  for (const p of pts) {
+    let bi = Math.floor(((diag(p) - minD) / range) * (bands - 1));
+    if (bi < 0) bi = 0; if (bi >= bands) bi = bands - 1;
+    acc[bi].sx += p.mx; acc[bi].sy += p.my; acc[bi].n++;
+  }
+
+  const raw = [];
+  for (const b of acc) {
+    if (b.n === 0) continue;
+    raw.push({
+      x: (b.sx / b.n / maskW) * W,
+      y: (b.sy / b.n / maskH) * H
+    });
+  }
+  if (raw.length < 2) { PATH = raw; return; }
+
+  // 살짝 스무딩(이동 평균)으로 커서 궤적을 부드럽게
+  const smoothed = [];
+  for (let i = 0; i < raw.length; i++) {
+    let sx = 0, sy = 0, cnt = 0;
+    for (let k = -1; k <= 1; k++) {
+      const j = i + k;
+      if (j >= 0 && j < raw.length) { sx += raw[j].x; sy += raw[j].y; cnt++; }
+    }
+    smoothed.push({ x: sx / cnt, y: sy / cnt });
+  }
+  PATH = smoothed;
+}
+
+// 진행도 u(0~1) → 경로상의 화면 좌표(선형 보간)
+function pathPoint(u) {
+  if (PATH.length === 0) return { x: -9999, y: -9999 };
+  if (PATH.length === 1) return PATH[0];
+  const f = u * (PATH.length - 1);
+  const i = Math.min(Math.floor(f), PATH.length - 2);
+  const localT = f - i;
+  const a = PATH[i], b = PATH[i + 1];
+  return {
+    x: a.x + (b.x - a.x) * localT,
+    y: a.y + (b.y - a.y) * localT
+  };
+}
+
+// ─── 사각형: 처음엔 화면 전체에 가득 ──────────────────────
+let squares = [];
+
+function build() {
+  squares = [];
+  const rng = makeRng(12345);
+  const step = P.size + P.gap;
+  const cols = Math.ceil(W / step) + 1;
+  const rows = Math.ceil(H / step) + 1;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      const homeX = c * step + P.size / 2;
+      const homeY = r * step + P.size / 2;
+      const onRoad = isRoad(homeX, homeY);
+      // 길 네모라면 "길 밖으로 나가는 방향"을 미리 계산 → 마무리 때 렉 방지
+      const out = onRoad ? nearestOutwardDir(homeX, homeY) : { x: 0, y: 0 };
+      squares.push({
+        homeX, homeY,          // 원래 자리
+        x: homeX, y: homeY,    // 현재 위치
+        vx: 0, vy: 0,          // 속도
+        rot: (rng() - 0.5) * 2 * P.rot * Math.PI / 180,
+        size: P.size,
+        phase: rng() * Math.PI * 2,
+        phase2: rng() * Math.PI * 2,
+        onRoad,                        // 마스크 길(흰색) 위의 사각형인가
+        outX: out.x, outY: out.y,      // 길 밖 방향(미리 계산)
+        opened: false                  // 마스크 길로서 이미 열렸는가(밀려남 확정)
+      });
+    }
+  }
+  pendingRoad = [];
+}
+
+// ─── 마우스 ───────────────────────────────────────────────
+let mouseX = -9999, mouseY = -9999;
+canvas.addEventListener('pointermove', (e) => {
+  if (autoPlaying) return; // 자동 재생 중엔 실제 마우스 무시
+  mouseX = e.clientX; mouseY = e.clientY;
+});
+canvas.addEventListener('pointerleave', () => {
+  if (autoPlaying) return;
+  mouseX = -9999; mouseY = -9999;
+});
+
+// ─── 자동 커서: 마스크 길을 정밀하게 따라감 ───────────────
+let autoPlaying = false;
+let autoT = 0;              // 0 → 1 진행도
+let finishing = 0;          // 마무리 진행 프레임(>0이면 남은 길 네모를 서서히 밀어냄)
+const FINISH_FRAMES = 40;   // 마무리를 나눠서 처리할 프레임 수
+
+function startAuto() {
+  autoPlaying = true;
+  autoT = 0;
+  finishing = 0;
+  build(); // 깨끗한 상태에서 시작
+  updateAutoBtn();
+}
+function stopAuto() {
+  autoPlaying = false;
+  finishing = 0;
+  mouseX = -9999; mouseY = -9999;
+  updateAutoBtn();
+}
+function updateAutoBtn() {
+  const b = document.getElementById('btnAuto');
+  if (autoPlaying) { b.textContent = '자동 정지 ■'; b.classList.add('on'); }
+  else { b.textContent = '자동 재생 ▶'; b.classList.remove('on'); }
+}
+
+// ─── 물리 업데이트 ────────────────────────────────────────
+function physics() {
+  // 자동 재생 중이면 커서를 마스크 경로 따라 이동
+  if (autoPlaying) {
+    autoT += 0.0022 * P.speed;
+    if (autoT >= 1) {
+      autoT = 1;
+      const p = pathPoint(1);
+      mouseX = p.x; mouseY = p.y;
+      autoPlaying = false;
+      finishing = FINISH_FRAMES; // 급하게 밀지 않고 여러 프레임에 걸쳐 마무리
+      // 아직 안 열린 길 네모만 모아 마무리 대상으로
+      pendingRoad = squares.filter(s => s.onRoad && !s.opened);
+      updateAutoBtn();
+    } else {
+      const p = pathPoint(autoT);
+      mouseX = p.x; mouseY = p.y;
+    }
+  }
+
+  // 마무리 단계: 남은 마스크 길 네모를 매 프레임 조금씩 부드럽게 밀어냄
+  if (finishing > 0) {
+    openRoadStep();
+    finishing--;
+    if (finishing === 0) {
+      mouseX = -9999; mouseY = -9999; // 커서 영향 제거
+    }
+  }
+
+  const rad = P.rad;
+  const radSq = rad * rad;
+
+  for (const s of squares) {
+    // 마우스/커서 반발력
+    const dx = s.x - mouseX;
+    const dy = s.y - mouseY;
+    const distSq = dx * dx + dy * dy;
+
+    if (distSq < radSq && distSq > 0.01) {
+      const dist = Math.sqrt(distSq);
+      const push = (1 - dist / rad) * P.force * 30; // 가까울수록 강하게
+      s.vx += (dx / dist) * push;
+      s.vy += (dy / dist) * push;
+      // 마스크 길 위 네모를 건드리면 "열림" 확정 → 영구히 안 돌아옴
+      if (s.onRoad) s.opened = true;
+    }
+
+    // 복귀 스프링:
+    // - 열린(opened) 마스크 길 네모는 스프링 0 → 절대 안 돌아옴(길 유지)
+    // - 그 외 네모는 원위치로 복귀(자석 느낌)
+    if (!s.opened) {
+      s.vx += (s.homeX - s.x) * P.spring;
+      s.vy += (s.homeY - s.y) * P.spring;
+    }
+  }
+
+  // ── 겹침 방지(분리력): 가까운 네모끼리 서로 밀어내 선/뭉침 방지 ──
+  separate();
+
+  // 속도 적분 + 감쇠
+  for (const s of squares) {
+    s.vx *= 0.82;
+    s.vy *= 0.82;
+    s.x += s.vx;
+    s.y += s.vy;
+  }
+}
+
+// ── 공간 해시 그리드로 이웃 네모만 검사하는 분리력 ──
+function separate() {
+  const desired = P.size + P.gap * 0.6; // 이 거리보다 가까우면 밀어냄
+  if (desired <= 0) return;
+  const cell = desired;
+  const grid = new Map();
+  const key = (cx, cy) => cx + ',' + cy;
+
+  // 네모를 셀에 배치
+  for (const s of squares) {
+    const cx = Math.floor(s.x / cell);
+    const cy = Math.floor(s.y / cell);
+    const k = key(cx, cy);
+    let arr = grid.get(k);
+    if (!arr) { arr = []; grid.set(k, arr); }
+    arr.push(s);
+  }
+
+  const desiredSq = desired * desired;
+
+  for (const s of squares) {
+    const cx = Math.floor(s.x / cell);
+    const cy = Math.floor(s.y / cell);
+    for (let gx = cx - 1; gx <= cx + 1; gx++) {
+      for (let gy = cy - 1; gy <= cy + 1; gy++) {
+        const arr = grid.get(key(gx, gy));
+        if (!arr) continue;
+        for (const o of arr) {
+          if (o === s) continue;
+          const dx = s.x - o.x;
+          const dy = s.y - o.y;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < desiredSq && d2 > 0.0001) {
+            const d = Math.sqrt(d2);
+            const overlap = (desired - d) / d * 0.5; // 절반씩 나눠 밀기
+            const ox = dx * overlap;
+            const oy = dy * overlap;
+            s.vx += ox * 0.4;
+            s.vy += oy * 0.4;
+            o.vx -= ox * 0.4;
+            o.vy -= oy * 0.4;
+          } else if (d2 <= 0.0001) {
+            // 완전히 겹친 경우 살짝 랜덤 분리
+            s.vx += (Math.random() - 0.5) * 0.5;
+            s.vy += (Math.random() - 0.5) * 0.5;
+          }
+        }
+      }
+    }
+  }
+}
+
+// 마무리: 아직 안 열린 마스크 길 네모를 여러 프레임에 걸쳐 조금씩 밀어냄.
+// pendingRoad(미리 계산된 방향 포함)를 매 프레임 일부만 처리 → 프레임 렉/점프 방지.
+function openRoadStep() {
+  if (pendingRoad.length === 0) return;
+  // 이번 프레임에 처리할 개수(전체를 FINISH_FRAMES에 나눠서)
+  const perFrame = Math.ceil(pendingRoad.length / Math.max(finishing, 1));
+  for (let i = 0; i < perFrame && pendingRoad.length > 0; i++) {
+    const s = pendingRoad.pop();
+    if (s.opened) continue;
+    s.opened = true;
+    s.vx += s.outX * 4.0; // 완만한 힘으로 밀어냄
+    s.vy += s.outY * 4.0;
+  }
+}
+
+// (x,y)에서 가장 가까운 길-바깥(검정) 방향 벡터
+function nearestOutwardDir(x, y) {
+  const angles = 16;
+  let best = { x: 0, y: -1 }, bestDist = Infinity;
+  for (let i = 0; i < angles; i++) {
+    const a = (i / angles) * Math.PI * 2;
+    const dx = Math.cos(a), dy = Math.sin(a);
+    // 이 방향으로 나아가며 길 밖(검정)에 처음 닿는 거리 탐색
+    for (let step = P.size; step <= 300; step += P.size) {
+      const nx = x + dx * step, ny = y + dy * step;
+      if (!isRoad(nx, ny)) {
+        if (step < bestDist) { bestDist = step; best = { x: dx, y: dy }; }
+        break;
+      }
+    }
+  }
+  return best;
+}
+
+// ─── 렌더 ─────────────────────────────────────────────────
+function draw() {
+  requestAnimationFrame(draw);
+  const t = performance.now() / 1000;
+
+  physics();
+
+  ctx.fillStyle = '#ffffff';
+  ctx.fillRect(0, 0, W, H);
+
+  ctx.fillStyle = '#000000';
+  for (const s of squares) {
+    const jig = s.opened ? 0 : P.jig; // 밀려나 자리잡은 네모는 흔들지 않음
+    const jx = Math.sin(t * 14 + s.phase) * jig;
+    const jy = Math.cos(t * 15 + s.phase2) * jig;
+    ctx.save();
+    ctx.translate(s.x + jx, s.y + jy);
+    ctx.rotate(s.rot);
+    ctx.fillRect(-s.size / 2, -s.size / 2, s.size, s.size);
+    ctx.restore();
+  }
+}
+
+// ─── 컨트롤 ───────────────────────────────────────────────
+const map = { size:'vSize', gap:'vGap', rot:'vRot', jig:'vJig', rad:'vRad', force:'vForce', spring:'vSpring', speed:'vSpeed' };
+for (const key in map) {
+  const input = document.getElementById(key);
+  input.addEventListener('input', () => {
+    P[key] = parseFloat(input.value);
+    document.getElementById(map[key]).textContent = input.value;
+    if (key === 'size' || key === 'gap' || key === 'rot') build();
+  });
+}
+
+document.getElementById('btnAuto').addEventListener('click', () => {
+  if (autoPlaying) stopAuto(); else startAuto();
+});
+document.getElementById('btnReset').addEventListener('click', () => {
+  stopAuto(); build();
+});
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'h' || e.key === 'H') {
+    const p = document.getElementById('panel');
+    p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+  }
+  if (e.key === 'r' || e.key === 'R') { stopAuto(); build(); }
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (autoPlaying) stopAuto(); else startAuto();
+  }
+});
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  buildPath();
+  build();
+}
+window.addEventListener('resize', resize);
+
+resize();
+draw();
+</script>
+</body>
+</html>
