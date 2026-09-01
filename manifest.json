@@ -1,5 +1,12 @@
 [
   {
+    "file": "red-squares-2.html",
+    "title": "Red Squares — Magnetic Path",
+    "description": "마우스 곡선 경로를 따라 네모들이 자석처럼 밀려나 mask 모양의 길이 생기는 인터랙션",
+    "author": "seongeun-p",
+    "date": "2026-09-01T16:35:54+09:00"
+  },
+  {
     "file": "night_drive_1.html",
     "title": "야간질주",
     "description": "",
