@@ -1,5 +1,12 @@
 [
   {
+    "file": "red-squares.html",
+    "title": "Squares in Region — 색 조절 가능",
+    "description": "mask 영역을 따라 배치된 사각형이 지글대는 인터랙션. 배경색과 사각형 색을 자유롭게 바꿀 수 있어요.",
+    "author": "seongeun-p",
+    "date": "2026-09-02T00:56:06+09:00"
+  },
+  {
     "file": "flicker-bars.html",
     "title": "Flicker Bars — 깜빡이는 흰 바",
     "description": "검정 배경에 흰색 세로 바들이 무작위로 깜빡이는 데이터 스트림 느낌의 인터랙션",
@@ -40,12 +47,5 @@
     "description": "",
     "author": "seongeun-p",
     "date": "2026-09-01T16:09:35+09:00"
-  },
-  {
-    "file": "red-squares/index.html",
-    "title": "Squares in Region",
-    "description": "",
-    "author": "seongeun-p",
-    "date": "2026-09-01T14:59:13+09:00"
   }
 ]
