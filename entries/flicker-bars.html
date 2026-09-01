@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Flicker Bars — 깜빡이는 흰 바</title>
+  <meta name="description" content="검정 배경에 흰색 세로 바들이 무작위로 깜빡이는 데이터 스트림 느낌의 인터랙션" />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #panel {
+      position: fixed; top: 14px; left: 14px;
+      background: rgba(0,0,0,0.6); color: #eee;
+      padding: 12px 14px; border-radius: 8px;
+      font: 12px/1.5 -apple-system, sans-serif; min-width: 240px;
+      border: 1px solid #333; z-index: 10;
+    }
+    #panel strong { color:#fff; }
+    #panel label { display:block; margin-top:8px; color:#aaa; }
+    #panel input[type=range]{ width:100%; }
+    #panel .v { float:right; color:#fff; }
+    #panel .hint { margin-top:10px; color:#777; font-size:11px; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <strong>Flicker Bars — 깜빡이는 흰 바</strong>
+  <label>바 두께 <span class="v" id="vW">6</span></label>
+  <input type="range" id="barW" min="2" max="20" step="1" value="6">
+  <label>바 높이 <span class="v" id="vH">28</span></label>
+  <input type="range" id="barH" min="8" max="80" step="2" value="28">
+  <label>가로 간격 <span class="v" id="vGX">10</span></label>
+  <input type="range" id="gapX" min="2" max="30" step="1" value="10">
+  <label>세로 간격 <span class="v" id="vGY">14</span></label>
+  <input type="range" id="gapY" min="2" max="40" step="1" value="14">
+  <label>채움 밀도 <span class="v" id="vFill">0.7</span></label>
+  <input type="range" id="fill" min="0.1" max="1" step="0.05" value="0.7">
+  <label>깜빡임 속도 <span class="v" id="vSpeed">1.0</span></label>
+  <input type="range" id="speed" min="0.1" max="4" step="0.1" value="1.0">
+  <div class="hint">H: 패널 숨기기 · R: 재배치</div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+const P = {
+  barW: 6,    // 바 두께(px)
+  barH: 28,   // 바 높이(px)
+  gapX: 10,   // 가로 간격
+  gapY: 14,   // 세로 간격
+  fill: 0.7,  // 각 칸이 실제로 존재할 확률(비어있는 칸을 만듦)
+  speed: 1.0  // 깜빡임 속도 배수
+};
+
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+// ─── 바 격자 생성 ─────────────────────────────────────────
+// 각 바는 독립적으로 밝기가 변한다.
+// - target: 목표 밝기(0~1). 가끔 새 목표로 점프(깜빡임)
+// - level: 현재 밝기. target을 향해 부드럽게 이동
+let bars = [];
+
+function build() {
+  bars = [];
+  const stepX = P.barW + P.gapX;
+  const stepY = P.barH + P.gapY;
+  const cols = Math.ceil(W / stepX) + 1;
+  const rows = Math.ceil(H / stepY) + 1;
+
+  // 가로/세로를 화면에 고르게 채우기 위한 시작 오프셋
+  const offX = (W - (cols - 1) * stepX) / 2;
+  const offY = (H - (rows - 1) * stepY) / 2 + stepY / 2;
+
+  for (let r = 0; r < rows; r++) {
+    for (let c = 0; c < cols; c++) {
+      // 밀도에 따라 일부 칸은 아예 비워둠(원본의 빈 공간 느낌)
+      const exists = Math.random() < P.fill;
+      const x = offX + c * stepX;
+      const y = offY + r * stepY;
+      const level = Math.random();                 // 초기 밝기
+      bars.push({
+        x, y,
+        exists,
+        level,
+        target: Math.random(),                     // 목표 밝기
+        // 다음 "깜빡임" 이벤트까지 남은 시간(초). 바마다 제각각.
+        nextFlip: rand(0.05, 1.5),
+        // 밝기가 target으로 다가가는 속도(바마다 다르게 → 어떤 건 톡톡, 어떤 건 스르르)
+        ease: rand(0.08, 0.5)
+      });
+    }
+  }
+}
+
+// ─── 애니메이션 ───────────────────────────────────────────
+let last = performance.now();
+
+function draw(now) {
+  requestAnimationFrame(draw);
+  let dt = (now - last) / 1000;
+  last = now;
+  if (dt > 0.1) dt = 0.1; // 탭 전환 등으로 큰 dt 방지
+
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, W, H);
+
+  const halfW = P.barW / 2;
+  const halfH = P.barH / 2;
+  const spd = P.speed;
+
+  for (const b of bars) {
+    if (!b.exists) continue;
+
+    // 깜빡임 타이머: 시간이 되면 새 목표 밝기로 점프
+    b.nextFlip -= dt * spd;
+    if (b.nextFlip <= 0) {
+      // 대부분은 밝게, 가끔 어둡게/꺼짐 → 원본의 다양한 밝기 분포
+      const roll = Math.random();
+      if (roll < 0.12) b.target = 0;               // 완전히 꺼짐
+      else if (roll < 0.30) b.target = rand(0.25, 0.55); // 회색
+      else b.target = rand(0.7, 1);                // 밝은 흰색
+      b.nextFlip = rand(0.05, 1.4);                // 다음 깜빡임까지
+    }
+
+    // 현재 밝기를 목표로 부드럽게 이동
+    b.level += (b.target - b.level) * b.ease * spd;
+
+    const v = Math.max(0, Math.min(1, b.level));
+    if (v <= 0.02) continue; // 거의 꺼진 건 그리지 않음
+
+    const g = Math.round(v * 255);
+    ctx.fillStyle = 'rgb(' + g + ',' + g + ',' + g + ')';
+    ctx.fillRect(Math.round(b.x - halfW), Math.round(b.y - halfH), P.barW, P.barH);
+  }
+}
+
+// ─── 컨트롤 ───────────────────────────────────────────────
+const map = {
+  barW:'vW', barH:'vH', gapX:'vGX', gapY:'vGY', fill:'vFill', speed:'vSpeed'
+};
+for (const key in map) {
+  const input = document.getElementById(key);
+  if (!input) continue;
+  input.addEventListener('input', () => {
+    P[key] = parseFloat(input.value);
+    document.getElementById(map[key]).textContent = input.value;
+    // 배치/밀도에 영향 주는 건 재생성
+    if (key === 'barW' || key === 'barH' || key === 'gapX' || key === 'gapY' || key === 'fill') {
+      build();
+    }
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'h' || e.key === 'H') {
+    const p = document.getElementById('panel');
+    p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+  }
+  if (e.key === 'r' || e.key === 'R') build();
+});
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  build();
+}
+window.addEventListener('resize', resize);
+
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
