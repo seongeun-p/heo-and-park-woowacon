@@ -5,12 +5,5 @@
     "description": "",
     "author": "seongeun-p",
     "date": "2026-09-01T14:59:13+09:00"
-  },
-  {
-    "file": "sample-entry.html",
-    "title": "샘플 항목 - 이렇게 올리면 돼요",
-    "description": "entries 폴더에 html 파일을 이렇게 추가하면 갤러리에 자동으로 나타납니다.",
-    "author": "seongeun-p",
-    "date": "2026-09-01T14:10:08+09:00"
   }
 ]
