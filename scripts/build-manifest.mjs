@@ -1,12 +1,13 @@
 #!/usr/bin/env node
-// entries/*.html 을 스캔해서 manifest.json을 생성합니다.
+// entries/ 안의 모든 *.html 을 (하위 폴더 포함, 재귀적으로) 스캔해서 manifest.json을 생성합니다.
+// 예: entries/sample-entry.html, entries/red-squares/index.html 둘 다 인식됩니다.
 // - title: <title> 태그
 // - description: <meta name="description">
 // - author, date: 해당 파일의 git 마지막 커밋 정보 (없으면 파일 mtime 사용)
 
 import { readdirSync, readFileSync, statSync, writeFileSync } from 'fs';
 import { execSync } from 'child_process';
-import { join, dirname } from 'path';
+import { join, dirname, relative, sep } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -33,13 +34,28 @@ function gitInfo(relPath) {
   }
 }
 
-function main() {
-  let files = [];
+// entries/ 아래를 재귀적으로 돌면서 .html 파일 전부 찾기 (entries 기준 상대경로 반환)
+function findHtmlFiles(dir) {
+  let results = [];
+  let items = [];
   try {
-    files = readdirSync(ENTRIES_DIR).filter(f => f.toLowerCase().endsWith('.html'));
+    items = readdirSync(dir, { withFileTypes: true });
   } catch {
-    files = [];
+    return results;
   }
+  for (const item of items) {
+    const full = join(dir, item.name);
+    if (item.isDirectory()) {
+      results = results.concat(findHtmlFiles(full));
+    } else if (item.isFile() && item.name.toLowerCase().endsWith('.html')) {
+      results.push(relative(ENTRIES_DIR, full).split(sep).join('/'));
+    }
+  }
+  return results;
+}
+
+function main() {
+  const files = findHtmlFiles(ENTRIES_DIR);
 
   const items = files.map(file => {
     const full = join(ENTRIES_DIR, file);
