@@ -1,5 +1,19 @@
 [
   {
+    "file": "density.html",
+    "title": "인구들",
+    "description": "",
+    "author": "heominjiiii",
+    "date": "2026-09-01T16:51:31+09:00"
+  },
+  {
+    "file": "window.html",
+    "title": "빛무리",
+    "description": "",
+    "author": "heominjiiii",
+    "date": "2026-09-01T16:51:31+09:00"
+  },
+  {
     "file": "red-squares-2.html",
     "title": "Red Squares — Magnetic Path",
     "description": "마우스 곡선 경로를 따라 네모들이 자석처럼 밀려나 mask 모양의 길이 생기는 인터랙션",
