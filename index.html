@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>허앤박 우아콘 갤러리</title>
+<title>허앤박 우아콘</title>
 <style>
   :root {
     --bg: #000;
@@ -18,7 +18,7 @@
   }
   header {
     padding: 56px 24px 32px;
-    text-align: center;
+    text-align: left;
   }
   header h1 {
     margin: 0;
@@ -83,7 +83,7 @@
 </head>
 <body>
 <header>
-  <h1>허앤박 우아콘 갤러리</h1>
+  <h1>허앤박 우아콘</h1>
 </header>
 <main>
   <div id="grid"></div>
@@ -107,9 +107,7 @@ async function main() {
     for (const item of list) {
       const a = document.createElement('a');
       a.className = 'card';
-      a.href = 'entries/' + item.file;
-      a.target = '_blank';
-      a.rel = 'noopener';
+      a.href = 'view.html?src=entries/' + encodeURIComponent(item.file);
 
       const thumb = document.createElement('div');
       thumb.className = 'thumb';
