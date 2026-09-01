@@ -1,5 +1,12 @@
 [
   {
+    "file": "flicker-bars.html",
+    "title": "Flicker Bars — 깜빡이는 흰 바",
+    "description": "검정 배경에 흰색 세로 바들이 무작위로 깜빡이는 데이터 스트림 느낌의 인터랙션",
+    "author": "seongeun-p",
+    "date": "2026-09-01T17:27:16+09:00"
+  },
+  {
     "file": "density.html",
     "title": "인구들",
     "description": "",
