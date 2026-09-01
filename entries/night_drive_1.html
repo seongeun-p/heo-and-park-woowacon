@@ -1,0 +1,1382 @@
+<title>야간질주</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#000000;
+    --line:#f4f3ee;
+    --marker-a:#3fe3e0;
+    --marker-b:#ff3b3b;
+    --panel-bg:rgba(18,18,20,0.92);
+    --panel-border:rgba(255,255,255,0.1);
+    --panel-text:#d8d8dc;
+    --panel-accent:#f4f3ee;
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--ground);
+    overscroll-behavior:none;
+  }
+
+  body{
+    overflow:hidden;
+    font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+    -webkit-user-select:none;
+    user-select:none;
+  }
+
+  #stage{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    background:var(--ground);
+  }
+
+  canvas{
+    position:absolute;
+    top:0;
+    left:0;
+    display:block;
+  }
+
+  #caption{
+    position:fixed;
+    left:18px;
+    bottom:14px;
+    font-size:11px;
+    letter-spacing:.04em;
+    color:#9a9aa0;
+    pointer-events:none;
+    z-index:6;
+    opacity:.65;
+  }
+
+  #speed{
+    position:fixed;
+    left:18px;
+    top:18px;
+    font-size:12px;
+    letter-spacing:.06em;
+    color:var(--panel-text);
+    z-index:6;
+    opacity:.85;
+  }
+
+  #speed span{
+    color:var(--panel-accent);
+    font-variant-numeric:tabular-nums;
+  }
+
+  #gearBtn{
+    position:fixed;
+    top:16px;
+    right:16px;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:1px solid var(--panel-border);
+    background:var(--panel-bg);
+    color:var(--panel-text);
+    font-size:15px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    z-index:10;
+  }
+
+  #panel{
+    position:fixed;
+    top:58px;
+    right:16px;
+    bottom:16px;
+    width:220px;
+    padding:16px 16px 14px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--panel-text);
+    z-index:10;
+    box-shadow:0 12px 28px rgba(0,0,0,0.4);
+    overflow-y:auto;
+    overscroll-behavior:contain;
+    -webkit-overflow-scrolling:touch;
+  }
+
+  #panel::-webkit-scrollbar{ width:6px; }
+  #panel::-webkit-scrollbar-track{ background:transparent; }
+  #panel::-webkit-scrollbar-thumb{ background:rgba(255,255,255,0.18); border-radius:3px; }
+
+  #panel[hidden]{ display:none; }
+
+  #panel h2{
+    margin:0 0 12px;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:#9a9aa0;
+  }
+
+  .row{ margin-bottom:12px; }
+  .row:last-of-type{ margin-bottom:0; }
+
+  .row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+
+  .row label span:last-child{
+    font-variant-numeric:tabular-nums;
+    color:var(--panel-accent);
+  }
+
+  .row input[type="range"]{
+    width:100%;
+    accent-color:var(--panel-accent);
+  }
+
+  .swatchRow{ display:flex; gap:10px; }
+  .swatchRow .field{ flex:1; min-width:0; }
+  .swatchRow label{ display:block; font-size:11.5px; margin-bottom:6px; }
+
+  .row input[type="color"]{
+    width:100%;
+    height:28px;
+    padding:2px;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    background:transparent;
+  }
+
+  .segToggle{
+    display:flex;
+    gap:6px;
+  }
+
+  .segBtn{
+    flex:1;
+    padding:7px 0;
+    background:transparent;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    color:var(--panel-text);
+    font-family:inherit;
+    font-size:11px;
+    letter-spacing:.02em;
+  }
+
+  .segBtn.active{
+    border-color:var(--panel-accent);
+    color:var(--panel-accent);
+    background:rgba(244,243,238,0.08);
+  }
+
+  .row.dimmed{
+    opacity:.35;
+    pointer-events:none;
+  }
+
+  #pathCanvas{
+    position:static;
+    display:block;
+    width:100%;
+    height:130px;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    background:rgba(255,255,255,0.03);
+    touch-action:none;
+    cursor:crosshair;
+  }
+
+  .pathHint{
+    font-size:10.5px;
+    line-height:1.4;
+    color:#9a9aa0;
+    margin-bottom:8px;
+  }
+
+  .pathTools{
+    display:flex;
+    gap:8px;
+    margin-top:8px;
+  }
+
+  .pathTools .segBtn{ flex:1; }
+
+  #pathZoomOverlay{
+    position:fixed;
+    inset:0;
+    background:rgba(0,0,0,0.7);
+    z-index:50;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:24px;
+  }
+
+  #pathZoomOverlay[hidden]{ display:none; }
+
+  .pathZoomCard{
+    width:min(92vw, 760px);
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:12px;
+    padding:18px;
+    box-shadow:0 20px 48px rgba(0,0,0,0.55);
+  }
+
+  .pathZoomHeader{
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    margin-bottom:10px;
+    color:var(--panel-text);
+    font-size:12.5px;
+    letter-spacing:.04em;
+  }
+
+  .pathZoomHeader .segBtn{
+    padding:6px 14px;
+  }
+
+  #pathCanvasZoom{
+    position:static;
+    display:block;
+    width:100%;
+    height:min(50vh, 380px);
+    border:1px solid var(--panel-border);
+    border-radius:8px;
+    background:rgba(255,255,255,0.03);
+    touch-action:none;
+    cursor:crosshair;
+  }
+
+  .subRow{
+    margin-top:10px;
+  }
+
+  #controls{
+    position:fixed;
+    left:0;
+    right:0;
+    bottom:26px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:18px;
+    z-index:8;
+  }
+
+  #startBtn{
+    padding:14px 26px;
+    border-radius:999px;
+    border:1px solid rgba(255,255,255,0.25);
+    background:rgba(18,18,20,0.85);
+    color:var(--panel-text);
+    font-family:inherit;
+    font-size:13px;
+    letter-spacing:.05em;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5);
+  }
+
+  #startBtn.running{
+    border-color:rgba(255,90,90,0.5);
+    color:#ff9a9a;
+  }
+
+  #gasBtn{
+    width:96px;
+    height:96px;
+    border-radius:50%;
+    border:1px solid rgba(255,255,255,0.25);
+    background:rgba(18,18,20,0.85);
+    color:var(--panel-text);
+    font-family:inherit;
+    font-size:13px;
+    letter-spacing:.05em;
+    box-shadow:0 8px 24px rgba(0,0,0,0.5);
+    opacity:.35;
+    pointer-events:none;
+    transition:opacity .2s;
+  }
+
+  #gasBtn.enabled{
+    opacity:1;
+    pointer-events:auto;
+  }
+
+  #gasBtn.pressed{
+    background:rgba(63,227,224,0.18);
+    border-color:var(--marker-a);
+    color:var(--marker-a);
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #stage{ display:none; }
+    #caption{ opacity:1; }
+  }
+</style>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="speed">SPEED <span id="speedVal">0</span></div>
+<div id="caption">출발을 누르고, 액셀을 눌러 속도를 올려보세요</div>
+
+<button id="gearBtn" title="설정" aria-label="설정 열기">⚙</button>
+<div id="panel" hidden>
+  <h2>Night Drive</h2>
+  <div class="row">
+    <label><span>최고 속도</span><span id="maxSpeedVal">140</span></label>
+    <input id="maxSpeedSlider" type="range" min="60" max="260" step="10" value="140">
+  </div>
+  <div class="row">
+    <label><span>가속력</span><span id="accelVal">55</span></label>
+    <input id="accelSlider" type="range" min="10" max="120" step="5" value="55">
+  </div>
+  <div class="row">
+    <label><span>감속력</span><span id="decelVal">35</span></label>
+    <input id="decelSlider" type="range" min="5" max="100" step="5" value="35">
+  </div>
+  <div class="row">
+    <label>커브 방식</label>
+    <div class="segToggle">
+      <button type="button" class="segBtn" id="curveModeAutoBtn">자동</button>
+      <button type="button" class="segBtn" id="curveModeCustomBtn">직접 그리기</button>
+    </div>
+  </div>
+  <div class="row" id="curveAmpRow">
+    <label><span>커브 강도</span><span id="curveAmpVal">0.6</span></label>
+    <input id="curveAmpSlider" type="range" min="0" max="2.5" step="0.1" value="0.6">
+  </div>
+  <div class="row" id="curveFreqRow">
+    <label><span>커브 빈도</span><span id="curveFreqVal">55</span></label>
+    <input id="curveFreqSlider" type="range" min="15" max="140" step="5" value="55">
+  </div>
+  <div class="row" id="curveRandomRow">
+    <label><span>커브 랜덤</span><span id="curveRandomVal">0.5</span></label>
+    <input id="curveRandomSlider" type="range" min="0" max="2.5" step="0.1" value="0.5">
+  </div>
+  <div class="row" id="customPathRow" hidden>
+    <label><span>경로 그리기</span></label>
+    <div class="pathHint">캔버스를 마우스(또는 손가락)로 누른 채 좌우로 움직여서 도로가 휘어질 모양을 직접 그려보세요. 확대 버튼을 누르면 더 넓게 그릴 수 있어요.</div>
+    <canvas id="pathCanvas" width="460" height="220"></canvas>
+    <div class="pathTools">
+      <button type="button" class="segBtn" id="pathZoomBtn">확대해서 그리기</button>
+      <button type="button" class="segBtn" id="pathClearBtn">지우기</button>
+    </div>
+    <div class="subRow">
+      <label><span>경로 강도</span><span id="pathAmpVal">2.2</span></label>
+      <input id="pathAmpSlider" type="range" min="0.5" max="4" step="0.1" value="2.2">
+    </div>
+    <div class="subRow">
+      <label><span>경로 길이</span><span id="pathLenVal">600</span></label>
+      <input id="pathLenSlider" type="range" min="150" max="1500" step="30" value="600">
+    </div>
+  </div>
+  <div class="row">
+    <label><span>중앙선 길이</span><span id="dashLenVal">3.4</span></label>
+    <input id="dashLenSlider" type="range" min="1" max="8" step="0.2" value="3.4">
+  </div>
+  <div class="row">
+    <label><span>중앙선 두께</span><span id="dashWidthVal">0.02</span></label>
+    <input id="dashWidthSlider" type="range" min="0.02" max="1" step="0.02" value="0.02">
+  </div>
+  <div class="row">
+    <label><span>마커 간격</span><span id="markerGapVal">14</span></label>
+    <input id="markerGapSlider" type="range" min="6" max="30" step="1" value="14">
+  </div>
+  <div class="row">
+    <label><span>마커 가로</span><span id="markerWVal">5.5</span></label>
+    <input id="markerWSlider" type="range" min="1" max="14" step="0.5" value="5.5">
+  </div>
+  <div class="row">
+    <label><span>마커 세로</span><span id="markerHVal">3.2</span></label>
+    <input id="markerHSlider" type="range" min="0.5" max="10" step="0.5" value="3.2">
+  </div>
+  <div class="row">
+    <label>가로등 모양</label>
+    <div class="segToggle">
+      <button type="button" class="segBtn" id="lampShapeCircleBtn">동그라미</button>
+      <button type="button" class="segBtn" id="lampShapeSquareBtn">스퀘어</button>
+    </div>
+  </div>
+  <div class="row">
+    <label><span>가로등 크기</span><span id="lampSizeVal">3.0</span></label>
+    <input id="lampSizeSlider" type="range" min="0.3" max="18" step="0.1" value="3">
+  </div>
+  <div class="row">
+    <label><span>가로등 높이</span><span id="lampHeightVal">0.7</span></label>
+    <input id="lampHeightSlider" type="range" min="0" max="4" step="0.1" value="0.7">
+  </div>
+  <div class="row">
+    <label><span>가로등 간격</span><span id="lampGapVal">34</span></label>
+    <input id="lampGapSlider" type="range" min="14" max="80" step="2" value="34">
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 개수</span><span id="buildingCountVal">40</span></label>
+    <input id="buildingCountSlider" type="range" min="0" max="120" step="5" value="40">
+  </div>
+  <div class="row">
+    <label>건물 불빛 모양</label>
+    <div class="segToggle">
+      <button type="button" class="segBtn" id="buildingShapeCircleBtn">동그라미</button>
+      <button type="button" class="segBtn" id="buildingShapeSquareBtn">스퀘어</button>
+    </div>
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 가로</span><span id="buildingWVal">1.0</span></label>
+    <input id="buildingWSlider" type="range" min="0.3" max="25" step="0.2" value="1">
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 세로</span><span id="buildingHVal">1.0</span></label>
+    <input id="buildingHSlider" type="range" min="0.3" max="25" step="0.2" value="1">
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 퍼짐</span><span id="buildingSpreadVal">2.5</span></label>
+    <input id="buildingSpreadSlider" type="range" min="0.5" max="6" step="0.1" value="2.5">
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 높이</span><span id="buildingHeightVal">2.4</span></label>
+    <input id="buildingHeightSlider" type="range" min="0.5" max="6" step="0.1" value="2.4">
+  </div>
+  <div class="row">
+    <label><span>건물 불빛 색 랜덤</span><span id="buildingColorRandomVal">40</span></label>
+    <input id="buildingColorRandomSlider" type="range" min="0" max="100" step="5" value="40">
+  </div>
+  <div class="row">
+    <label><span>불빛 반짝임 강도</span><span id="twinkleAmountVal">0</span></label>
+    <input id="twinkleAmountSlider" type="range" min="0" max="100" step="5" value="0">
+  </div>
+  <div class="row">
+    <label><span>불빛 반짝임 속도</span><span id="twinkleSpeedVal">1.5</span></label>
+    <input id="twinkleSpeedSlider" type="range" min="0.2" max="5" step="0.1" value="1.5">
+  </div>
+  <div class="row">
+    <label><span>장노출 효과</span><span id="trailVal">0</span></label>
+    <input id="trailSlider" type="range" min="0" max="100" step="5" value="0">
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>배경색</label>
+      <input id="bgColor" type="color" value="#000000">
+    </div>
+    <div class="field">
+      <label>차선 색</label>
+      <input id="lineColor" type="color" value="#f4f3ee">
+    </div>
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>도로 색</label>
+      <input id="roadColor" type="color" value="#000000">
+    </div>
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>마커 위쪽</label>
+      <input id="markerAColor" type="color" value="#3fe3e0">
+    </div>
+    <div class="field">
+      <label>마커 아래쪽</label>
+      <input id="markerBColor" type="color" value="#ff3b3b">
+    </div>
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>가로등 색</label>
+      <input id="lampColor" type="color" value="#ffd699">
+    </div>
+    <div class="field">
+      <label>건물 불빛 색</label>
+      <input id="buildingColor" type="color" value="#ffdca0">
+    </div>
+  </div>
+</div>
+
+<div id="pathZoomOverlay" hidden>
+  <div class="pathZoomCard">
+    <div class="pathZoomHeader">
+      <span>경로 그리기 (확대)</span>
+      <button type="button" class="segBtn" id="pathZoomCloseBtn">닫기</button>
+    </div>
+    <canvas id="pathCanvasZoom" width="1100" height="420"></canvas>
+    <div class="pathTools">
+      <button type="button" class="segBtn" id="pathClearZoomBtn">지우기</button>
+    </div>
+  </div>
+</div>
+
+<div id="controls">
+  <button id="startBtn" type="button">출발</button>
+  <button id="gasBtn" type="button">액셀</button>
+</div>
+
+<script>
+(function(){
+  var stage = document.getElementById('stage');
+  var canvas = document.getElementById('cv');
+  var ctx = canvas.getContext('2d');
+  var gearBtn = document.getElementById('gearBtn');
+  var panel = document.getElementById('panel');
+  var startBtn = document.getElementById('startBtn');
+  var gasBtn = document.getElementById('gasBtn');
+  var speedVal = document.getElementById('speedVal');
+
+  var maxSpeedSlider = document.getElementById('maxSpeedSlider');
+  var accelSlider = document.getElementById('accelSlider');
+  var decelSlider = document.getElementById('decelSlider');
+  var curveModeAutoBtn = document.getElementById('curveModeAutoBtn');
+  var curveModeCustomBtn = document.getElementById('curveModeCustomBtn');
+  var curveAmpRow = document.getElementById('curveAmpRow');
+  var curveFreqRow = document.getElementById('curveFreqRow');
+  var curveRandomRow = document.getElementById('curveRandomRow');
+  var customPathRow = document.getElementById('customPathRow');
+  var pathCanvas = document.getElementById('pathCanvas');
+  var pctx = pathCanvas.getContext('2d');
+  var pathClearBtn = document.getElementById('pathClearBtn');
+  var pathZoomBtn = document.getElementById('pathZoomBtn');
+  var pathZoomOverlay = document.getElementById('pathZoomOverlay');
+  var pathZoomCloseBtn = document.getElementById('pathZoomCloseBtn');
+  var pathCanvasZoom = document.getElementById('pathCanvasZoom');
+  var pctxZoom = pathCanvasZoom.getContext('2d');
+  var pathClearZoomBtn = document.getElementById('pathClearZoomBtn');
+  var pathAmpSlider = document.getElementById('pathAmpSlider');
+  var pathAmpVal = document.getElementById('pathAmpVal');
+  var pathLenSlider = document.getElementById('pathLenSlider');
+  var pathLenVal = document.getElementById('pathLenVal');
+  var curveAmpSlider = document.getElementById('curveAmpSlider');
+  var curveFreqSlider = document.getElementById('curveFreqSlider');
+  var curveRandomSlider = document.getElementById('curveRandomSlider');
+  var dashLenSlider = document.getElementById('dashLenSlider');
+  var dashWidthSlider = document.getElementById('dashWidthSlider');
+  var markerGapSlider = document.getElementById('markerGapSlider');
+  var markerWSlider = document.getElementById('markerWSlider');
+  var markerHSlider = document.getElementById('markerHSlider');
+  var lampShapeCircleBtn = document.getElementById('lampShapeCircleBtn');
+  var lampShapeSquareBtn = document.getElementById('lampShapeSquareBtn');
+  var lampSizeSlider = document.getElementById('lampSizeSlider');
+  var lampHeightSlider = document.getElementById('lampHeightSlider');
+  var lampGapSlider = document.getElementById('lampGapSlider');
+  var buildingCountSlider = document.getElementById('buildingCountSlider');
+  var buildingShapeCircleBtn = document.getElementById('buildingShapeCircleBtn');
+  var buildingShapeSquareBtn = document.getElementById('buildingShapeSquareBtn');
+  var buildingWSlider = document.getElementById('buildingWSlider');
+  var buildingHSlider = document.getElementById('buildingHSlider');
+  var buildingSpreadSlider = document.getElementById('buildingSpreadSlider');
+  var buildingHeightSlider = document.getElementById('buildingHeightSlider');
+  var buildingColorRandomSlider = document.getElementById('buildingColorRandomSlider');
+  var twinkleAmountSlider = document.getElementById('twinkleAmountSlider');
+  var twinkleSpeedSlider = document.getElementById('twinkleSpeedSlider');
+  var trailSlider = document.getElementById('trailSlider');
+  var maxSpeedVal = document.getElementById('maxSpeedVal');
+  var accelVal = document.getElementById('accelVal');
+  var decelVal = document.getElementById('decelVal');
+  var curveAmpVal = document.getElementById('curveAmpVal');
+  var curveFreqVal = document.getElementById('curveFreqVal');
+  var curveRandomVal = document.getElementById('curveRandomVal');
+  var dashLenVal = document.getElementById('dashLenVal');
+  var dashWidthVal = document.getElementById('dashWidthVal');
+  var markerGapVal = document.getElementById('markerGapVal');
+  var markerWVal = document.getElementById('markerWVal');
+  var markerHVal = document.getElementById('markerHVal');
+  var lampSizeVal = document.getElementById('lampSizeVal');
+  var lampHeightVal = document.getElementById('lampHeightVal');
+  var lampGapVal = document.getElementById('lampGapVal');
+  var buildingCountVal = document.getElementById('buildingCountVal');
+  var buildingWVal = document.getElementById('buildingWVal');
+  var buildingHVal = document.getElementById('buildingHVal');
+  var buildingSpreadVal = document.getElementById('buildingSpreadVal');
+  var buildingHeightVal = document.getElementById('buildingHeightVal');
+  var buildingColorRandomVal = document.getElementById('buildingColorRandomVal');
+  var twinkleAmountVal = document.getElementById('twinkleAmountVal');
+  var twinkleSpeedVal = document.getElementById('twinkleSpeedVal');
+  var trailVal = document.getElementById('trailVal');
+  var bgColor = document.getElementById('bgColor');
+  var lineColor = document.getElementById('lineColor');
+  var markerAColor = document.getElementById('markerAColor');
+  var markerBColor = document.getElementById('markerBColor');
+  var lampColor = document.getElementById('lampColor');
+  var buildingColor = document.getElementById('buildingColor');
+  var roadColor = document.getElementById('roadColor');
+
+  // ---- tunables ----
+  var MAX_SPEED = 140;      // 최고 속도 (world units / sec)
+  var ACCEL = 55;           // 가속력
+  var DECEL = 35;           // 감속력 (액셀 뗐을 때)
+  var CURVE_AMP = 0.6;      // 커브 강도
+  var CURVE_FREQ = 55;      // 커브 빈도 (값이 작을수록 굽이가 김)
+  var CURVE_RANDOM = 0.5;   // 커브 랜덤 (구불구불한 정도의 불규칙함)
+  var DASH_LEN = 3.4;       // 중앙선 길이 (world units)
+  var DASH_WIDTH = 0.02;    // 중앙선 두께
+  var MARKER_GAP = 14;      // 마커 간격
+  var MARKER_W = 5.5;       // 마커 가로 크기
+  var MARKER_H = 3.2;       // 마커 세로 크기
+  var LAMP_SHAPE = 'circle'; // 가로등 모양 (circle / square)
+  var LAMP_SIZE = 3;        // 가로등 크기 배율
+  var LAMP_HEIGHT = 0.7;    // 가로등 높이 (도로면 기준)
+  var LAMP_GAP = 34;        // 가로등 간격
+  var BUILDING_COUNT = 40;  // 건물 불빛 개수
+  var BUILDING_SHAPE = 'circle'; // 건물 불빛 모양 (circle / square)
+  var BUILDING_W = 1;       // 건물 불빛 가로 배율
+  var BUILDING_H = 1;       // 건물 불빛 세로 배율
+  var BUILDING_SPREAD = 2.5; // 건물 불빛 퍼짐 (좌우 확산 정도)
+  var BUILDING_HEIGHT = 2.4; // 건물 불빛 높이 (최대치)
+  var BUILDING_COLOR_RANDOM = 40; // 건물 불빛 색 랜덤 정도 (0=단일 색)
+  var TWINKLE_AMOUNT = 0;   // 불빛 반짝임 강도 (0=반짝임 없음)
+  var TWINKLE_SPEED = 1.5;  // 불빛 반짝임 속도
+  var TRAIL_AMOUNT = 0;     // 장노출 효과 (0=없음)
+  var GROUND_COLOR = '#000000';
+  var LINE_COLOR = '#f4f3ee';
+  var MARKER_A_COLOR = '#3fe3e0';
+  var MARKER_B_COLOR = '#ff3b3b';
+  var LAMP_COLOR = '#ffd699';
+  var BUILDING_COLOR = '#ffdca0';
+  var ROAD_COLOR = '#000000';
+
+  // 커브 방식: 'auto'(공식 기반) 또는 'custom'(직접 그린 경로)
+  var CURVE_MODE = 'auto';
+  var PATH_RES = 300;           // 직접 그린 경로의 해상도(샘플 개수)
+  var PATH_LOOP_LEN = 600;      // 경로 길이 (한 바퀴가 반복되는 거리, world units) - 세 굽이 정도 그릴 수 있는 길이
+  var PATH_MAX_LATERAL = 2.2;   // 경로 강도 (그려진 값 [-1,1]에 곱해지는 배율)
+  var CUSTOM_PATH = new Array(PATH_RES).fill(0);
+
+  // 건물 불빛마다 고정된 랜덤 특성(측면/높이/크기/위상) - 한 번만 생성해서
+  // 슬라이더로 개수를 조절해도 같은 불빛들이 유지되도록 함
+  var BUILDING_SEEDS = [];
+  (function(){
+    for (var _bi = 0; _bi < 140; _bi++){
+      BUILDING_SEEDS.push({
+        side: Math.random() < 0.5 ? -1 : 1,
+        latRand: Math.random(),
+        heightRand: Math.random(),
+        sizeRand: 0.6 + Math.random() * 0.8,
+        zJitter: Math.random(),
+        twinklePhase: Math.random() * Math.PI * 2,
+        colorHueOffset: Math.random() * 2 - 1,
+        colorLightOffset: Math.random() * 2 - 1
+      });
+    }
+  })();
+
+  var timeElapsed = 0; // 반짝임 애니메이션에 쓰이는 누적 시간(초)
+
+  function twinkleFactor(phase){
+    if (TWINKLE_AMOUNT <= 0) return 1;
+    var s = 0.5 + 0.5 * Math.sin(timeElapsed * TWINKLE_SPEED * 2 + phase);
+    return 1 - (TWINKLE_AMOUNT / 100) * s;
+  }
+
+  // deterministic pseudo-random phase for lamps (which don't carry a seed
+  // object) so each post twinkles slightly out of sync with its neighbors
+  function lampTwinklePhase(i, side){
+    var v = Math.sin(i * 12.9898 + side * 78.233) * 43758.5453;
+    return (v - Math.floor(v)) * Math.PI * 2;
+  }
+
+  // fixed random octaves (picked once) that blend into the curve so it
+  // doesn't repeat as a perfectly clean sine wave
+  var CURVE_NOISE_OCTAVES = [
+    { freqMul: 0.31, phase: Math.random() * Math.PI * 2, weight: 1.0 },
+    { freqMul: 0.67, phase: Math.random() * Math.PI * 2, weight: 0.6 },
+    { freqMul: 1.42, phase: Math.random() * Math.PI * 2, weight: 0.35 },
+    { freqMul: 2.85, phase: Math.random() * Math.PI * 2, weight: 0.2 }
+  ];
+  var CURVE_NOISE_NORM = 0;
+  for (var _ni = 0; _ni < CURVE_NOISE_OCTAVES.length; _ni++) CURVE_NOISE_NORM += CURVE_NOISE_OCTAVES[_ni].weight;
+
+  function curveNoise(z){
+    var v = 0;
+    for (var i = 0; i < CURVE_NOISE_OCTAVES.length; i++){
+      var o = CURVE_NOISE_OCTAVES[i];
+      v += Math.sin(z / CURVE_FREQ * o.freqMul + o.phase) * o.weight;
+    }
+    return v / CURVE_NOISE_NORM;
+  }
+
+  var IDLE_SPEED = 10;      // 출발 직후 속도
+  var DASH_GAP = 6.5;       // 점선 사이 간격
+  var DASH_COUNT = 26;
+  var MARKER_COUNT = 22;
+  var LAMP_COUNT = 16;
+  var ROAD_HALF_WIDTH = 1.1;
+  var ROAD_FAR_Z = 260;     // 도로 표면을 그리는 최대 깊이
+  var CAMERA_DEPTH = 0.62;  // 원근감 (작을수록 급격하게 커짐)
+
+  function hexToHsl(hex){
+    var rgb = hexToRgb(hex);
+    var r = rgb.r / 255, g = rgb.g / 255, b = rgb.b / 255;
+    var max = Math.max(r, g, b), min = Math.min(r, g, b);
+    var h, s, l = (max + min) / 2;
+    if (max === min){
+      h = 0; s = 0;
+    } else {
+      var d = max - min;
+      s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
+      switch (max){
+        case r: h = (g - b) / d + (g < b ? 6 : 0); break;
+        case g: h = (b - r) / d + 2; break;
+        default: h = (r - g) / d + 4;
+      }
+      h *= 60;
+    }
+    return { h: h, s: s * 100, l: l * 100 };
+  }
+
+  function hslToRgbStr(h, s, l){
+    h = ((h % 360) + 360) % 360;
+    s = Math.max(0, Math.min(100, s)) / 100;
+    l = Math.max(0, Math.min(100, l)) / 100;
+    var c = (1 - Math.abs(2 * l - 1)) * s;
+    var x = c * (1 - Math.abs((h / 60) % 2 - 1));
+    var m = l - c / 2;
+    var r, g, b;
+    if (h < 60){ r = c; g = x; b = 0; }
+    else if (h < 120){ r = x; g = c; b = 0; }
+    else if (h < 180){ r = 0; g = c; b = x; }
+    else if (h < 240){ r = 0; g = x; b = c; }
+    else if (h < 300){ r = x; g = 0; b = c; }
+    else { r = c; g = 0; b = x; }
+    r = Math.round((r + m) * 255);
+    g = Math.round((g + m) * 255);
+    b = Math.round((b + m) * 255);
+    return 'rgb(' + r + ',' + g + ',' + b + ')';
+  }
+
+  function hexToRgb(hex){
+    var h = (hex || '#000000').replace('#', '');
+    if (h.length === 3) h = h.split('').map(function(c){ return c + c; }).join('');
+    var num = parseInt(h, 16) || 0;
+    return { r: (num >> 16) & 255, g: (num >> 8) & 255, b: num & 255 };
+  }
+
+  var running = false;
+  var accelerating = false;
+  var speed = 0;
+  var distance = 0;
+
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 0, H = 0, horizonY = 0;
+
+  function resizeCanvas(){
+    W = stage.clientWidth;
+    H = stage.clientHeight;
+    horizonY = H * 0.42;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function curveX(z){
+    if (CURVE_MODE === 'custom'){
+      var t = ((z % PATH_LOOP_LEN) + PATH_LOOP_LEN) % PATH_LOOP_LEN;
+      var f = t / PATH_LOOP_LEN * PATH_RES;
+      var i0 = Math.floor(f) % PATH_RES;
+      var i1 = (i0 + 1) % PATH_RES;
+      var frac = f - Math.floor(f);
+      var v0 = CUSTOM_PATH[i0], v1 = CUSTOM_PATH[i1];
+      return (v0 + (v1 - v0) * frac) * PATH_MAX_LATERAL;
+    }
+    return CURVE_AMP * Math.sin(z / CURVE_FREQ) + CURVE_RANDOM * curveNoise(z);
+  }
+
+  // project a world point at depth z (>=0, camera at 0) and lateral offset
+  // (relative to the camera's own lane position) into screen coordinates.
+  function project(z, lateral){
+    var scale = CAMERA_DEPTH / (CAMERA_DEPTH + z / 40);
+    var screenY = horizonY + scale * (H - horizonY);
+    var screenX = W / 2 + lateral * scale * (W * 0.42);
+    return { x: screenX, y: screenY, scale: scale };
+  }
+
+  function laneOffsetAt(z, extra){
+    return curveX(distance + z) - curveX(distance) + (extra || 0);
+  }
+
+  function drawDash(z0, z1){
+    var camLane0 = laneOffsetAt(z0);
+    var camLane1 = laneOffsetAt(z1);
+    var p0 = project(z0, camLane0);
+    var p1 = project(z1, camLane1);
+    var w0 = DASH_WIDTH * p0.scale * (W * 0.42);
+    var w1 = DASH_WIDTH * p1.scale * (W * 0.42);
+    if (p0.y - p1.y < 0.4) return;
+    ctx.beginPath();
+    ctx.moveTo(p0.x - w0, p0.y);
+    ctx.lineTo(p0.x + w0, p0.y);
+    ctx.lineTo(p1.x + w1, p1.y);
+    ctx.lineTo(p1.x - w1, p1.y);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  function drawMarker(z, side){
+    var lane = laneOffsetAt(z, side * ROAD_HALF_WIDTH);
+    var p = project(z, lane);
+    if (p.scale < 0.02) return;
+    var w = Math.max(1.2, MARKER_W * p.scale);
+    var h = Math.max(1, MARKER_H * p.scale);
+    ctx.fillStyle = MARKER_A_COLOR;
+    ctx.shadowColor = MARKER_A_COLOR;
+    ctx.fillRect(p.x - w / 2, p.y - h, w, h);
+    ctx.fillStyle = MARKER_B_COLOR;
+    ctx.shadowColor = MARKER_B_COLOR;
+    ctx.fillRect(p.x - w / 2, p.y, w, h);
+  }
+
+  // a lamp post glow sits above road level on either side, well up in the
+  // frame — same depth projection as a marker, just lifted by its height.
+  function drawLamp(z, side, phase){
+    var lane = laneOffsetAt(z, side * (ROAD_HALF_WIDTH * 1.7));
+    var p = project(z, lane);
+    if (p.scale < 0.012) return;
+    var lift = LAMP_HEIGHT * p.scale * (H * 0.9);
+    var y = p.y - lift;
+    if (y < -40) return;
+    var w = Math.max(1.6, 8 * p.scale * LAMP_SIZE);
+    var h = Math.max(0.9, 2.4 * p.scale * LAMP_SIZE);
+    ctx.fillStyle = LAMP_COLOR;
+    ctx.shadowColor = LAMP_COLOR;
+    ctx.globalAlpha = twinkleFactor(phase);
+    if (LAMP_SHAPE === 'square'){
+      ctx.fillRect(p.x - w, y - h, w * 2, h * 2);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(p.x, y, w, h, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // scattered distant "apartment window" lights — wider and more randomly
+  // spread than the lamp posts, standing in for a city skyline out past
+  // the road's shoulders.
+  function drawBuilding(z, seed){
+    var lateral = seed.side * (ROAD_HALF_WIDTH * 1.5 + seed.latRand * BUILDING_SPREAD);
+    var lane = laneOffsetAt(z, lateral);
+    var p = project(z, lane);
+    if (p.scale < 0.01) return;
+    var lift = (0.3 + seed.heightRand * BUILDING_HEIGHT) * p.scale * (H * 0.9);
+    var y = p.y - lift;
+    if (y < -40) return;
+    var wSz = Math.max(0.7, 2.1 * p.scale * BUILDING_W * seed.sizeRand);
+    var hSz = Math.max(0.7, 2.1 * p.scale * BUILDING_H * seed.sizeRand);
+    var col = BUILDING_COLOR;
+    if (BUILDING_COLOR_RANDOM > 0){
+      var baseHsl = hexToHsl(BUILDING_COLOR);
+      var strength = BUILDING_COLOR_RANDOM / 100;
+      var hh = baseHsl.h + seed.colorHueOffset * 45 * strength;
+      var ll = baseHsl.l + seed.colorLightOffset * 20 * strength;
+      col = hslToRgbStr(hh, baseHsl.s, Math.max(20, Math.min(85, ll)));
+    }
+    ctx.fillStyle = col;
+    ctx.shadowColor = col;
+    ctx.globalAlpha = twinkleFactor(seed.twinklePhase);
+    if (BUILDING_SHAPE === 'square'){
+      ctx.fillRect(p.x - wSz, y - hSz, wSz * 2, hSz * 2);
+    } else {
+      ctx.beginPath();
+      ctx.ellipse(p.x, y, wSz, hSz, 0, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // fills a strip of ground between two lateral bounds (as functions of z)
+  // from the camera out to farZ, in a handful of far-to-near quads so it
+  // follows the road's curve smoothly.
+  function fillZBand(farZ, leftAt, rightAt){
+    var steps = 44;
+    for (var s = steps - 1; s >= 0; s--){
+      var z0 = farZ * s / steps;
+      var z1 = farZ * (s + 1) / steps;
+      var pL0 = project(z0, laneOffsetAt(z0, leftAt(z0)));
+      var pR0 = project(z0, laneOffsetAt(z0, rightAt(z0)));
+      var pL1 = project(z1, laneOffsetAt(z1, leftAt(z1)));
+      var pR1 = project(z1, laneOffsetAt(z1, rightAt(z1)));
+      if (pL0.y - pL1.y < 0.2) continue;
+      ctx.beginPath();
+      ctx.moveTo(pL0.x, pL0.y);
+      ctx.lineTo(pR0.x, pR0.y);
+      ctx.lineTo(pR1.x, pR1.y);
+      ctx.lineTo(pL1.x, pL1.y);
+      ctx.closePath();
+      ctx.fill();
+    }
+  }
+
+  function negHalf(){ return -ROAD_HALF_WIDTH; }
+  function posHalf(){ return ROAD_HALF_WIDTH; }
+
+  function draw(){
+    var trailAlpha = 1 - (TRAIL_AMOUNT / 100) * 0.97;
+    var bg = hexToRgb(GROUND_COLOR);
+    ctx.fillStyle = 'rgba(' + bg.r + ',' + bg.g + ',' + bg.b + ',' + trailAlpha + ')';
+    ctx.fillRect(0, 0, W, H);
+
+    // scattered building/apartment lights, far-to-near
+    if (BUILDING_COUNT > 0){
+      var buildingPattern = 16 * BUILDING_COUNT;
+      for (var bi = BUILDING_COUNT - 1; bi >= 0; bi--){
+        var seed = BUILDING_SEEDS[bi % BUILDING_SEEDS.length];
+        var bBase = (bi + seed.zJitter * 0.8) * 16 - (distance % buildingPattern);
+        var bz = ((bBase % buildingPattern) + buildingPattern) % buildingPattern;
+        ctx.shadowBlur = 5;
+        drawBuilding(bz, seed);
+      }
+    }
+
+    // lamp posts overhead, far-to-near
+    var lampPattern = LAMP_GAP * LAMP_COUNT;
+    for (var lampSide = -1; lampSide <= 1; lampSide += 2){
+      for (var lp = LAMP_COUNT - 1; lp >= 0; lp--){
+        var lz = ((lp * LAMP_GAP - (distance % lampPattern)) % lampPattern + lampPattern) % lampPattern;
+        ctx.shadowBlur = 8;
+        drawLamp(lz, lampSide, lampTwinklePhase(lp, lampSide));
+      }
+    }
+
+    // road surface (asphalt strip following the curve)
+    ctx.shadowBlur = 0;
+    ctx.fillStyle = ROAD_COLOR;
+    fillZBand(ROAD_FAR_Z, negHalf, posHalf);
+
+    // center dashed line, drawn far-to-near so near (bigger) dashes paint over
+    ctx.fillStyle = LINE_COLOR;
+    ctx.shadowColor = LINE_COLOR;
+    var speedFactor = speed / MAX_SPEED;
+    var stretch = 1 + speedFactor * 2.4;
+    var pattern = (DASH_LEN + DASH_GAP) * DASH_COUNT;
+    var dashes = [];
+    for (var i = DASH_COUNT - 1; i >= 0; i--){
+      var base = i * (DASH_LEN + DASH_GAP) - (distance % pattern);
+      var z0 = ((base % pattern) + pattern) % pattern;
+      var z1 = z0 + DASH_LEN * stretch;
+      dashes.push([z0, z1]);
+    }
+    for (var d = 0; d < dashes.length; d++){
+      ctx.shadowBlur = 5 + speedFactor * 10;
+      drawDash(dashes[d][0], dashes[d][1]);
+    }
+
+    // side markers, far-to-near
+    var markerPattern = MARKER_GAP * MARKER_COUNT;
+    for (var side = -1; side <= 1; side += 2){
+      for (var m = MARKER_COUNT - 1; m >= 0; m--){
+        var mz = ((m * MARKER_GAP - (distance % markerPattern)) % markerPattern + markerPattern) % markerPattern;
+        ctx.shadowBlur = 6;
+        drawMarker(mz, side);
+      }
+    }
+
+    ctx.shadowBlur = 0;
+  }
+
+  var lastT = null;
+  function loop(now){
+    if (lastT === null) lastT = now;
+    var dt = Math.min(0.05, (now - lastT) / 1000);
+    lastT = now;
+    timeElapsed += dt;
+
+    if (running){
+      if (accelerating){
+        speed = Math.min(MAX_SPEED, speed + ACCEL * dt * 4);
+      } else {
+        speed = Math.max(IDLE_SPEED, speed - DECEL * dt * 4);
+      }
+      distance += speed * dt;
+      speedVal.textContent = Math.round(speed);
+    }
+
+    draw();
+    requestAnimationFrame(loop);
+  }
+
+  function setRunning(on){
+    running = on;
+    accelerating = false;
+    if (on){
+      speed = IDLE_SPEED;
+      distance = 0;
+      startBtn.textContent = '정지';
+      startBtn.classList.add('running');
+      gasBtn.classList.add('enabled');
+    } else {
+      speed = 0;
+      speedVal.textContent = '0';
+      startBtn.textContent = '출발';
+      startBtn.classList.remove('running');
+      gasBtn.classList.remove('enabled');
+      gasBtn.classList.remove('pressed');
+      draw();
+    }
+  }
+
+  startBtn.addEventListener('click', function(){
+    setRunning(!running);
+  });
+
+  function gasDown(e){
+    if (!running) return;
+    if (e) e.preventDefault();
+    accelerating = true;
+    gasBtn.classList.add('pressed');
+  }
+  function gasUp(e){
+    accelerating = false;
+    gasBtn.classList.remove('pressed');
+  }
+
+  gasBtn.addEventListener('mousedown', gasDown);
+  gasBtn.addEventListener('touchstart', gasDown, { passive: false });
+  window.addEventListener('mouseup', gasUp);
+  window.addEventListener('touchend', gasUp);
+  window.addEventListener('touchcancel', gasUp);
+
+  window.addEventListener('keydown', function(e){
+    if (e.code === 'Space' || e.code === 'ArrowUp'){
+      gasDown(e);
+    }
+  });
+  window.addEventListener('keyup', function(e){
+    if (e.code === 'Space' || e.code === 'ArrowUp'){
+      gasUp(e);
+    }
+  });
+
+  gearBtn.addEventListener('click', function(){
+    panel.hidden = !panel.hidden;
+  });
+
+  maxSpeedSlider.addEventListener('input', function(){
+    MAX_SPEED = parseInt(maxSpeedSlider.value, 10);
+    maxSpeedVal.textContent = MAX_SPEED;
+  });
+
+  accelSlider.addEventListener('input', function(){
+    ACCEL = parseInt(accelSlider.value, 10);
+    accelVal.textContent = ACCEL;
+  });
+
+  decelSlider.addEventListener('input', function(){
+    DECEL = parseInt(decelSlider.value, 10);
+    decelVal.textContent = DECEL;
+  });
+
+  curveAmpSlider.addEventListener('input', function(){
+    CURVE_AMP = parseFloat(curveAmpSlider.value);
+    curveAmpVal.textContent = CURVE_AMP.toFixed(1);
+  });
+
+  curveFreqSlider.addEventListener('input', function(){
+    CURVE_FREQ = parseInt(curveFreqSlider.value, 10);
+    curveFreqVal.textContent = CURVE_FREQ;
+  });
+
+  curveRandomSlider.addEventListener('input', function(){
+    CURVE_RANDOM = parseFloat(curveRandomSlider.value);
+    curveRandomVal.textContent = CURVE_RANDOM.toFixed(1);
+  });
+
+  // ---- 직접 경로 그리기 ----
+  var isDrawingPath = false;
+  var lastPathIndex = null;
+  var lastPathVal = 0;
+
+  function drawPathOn(canvasEl, c){
+    var w = canvasEl.width, h = canvasEl.height;
+    c.clearRect(0, 0, w, h);
+    c.strokeStyle = 'rgba(244,243,238,0.18)';
+    c.lineWidth = 1;
+    c.beginPath();
+    c.moveTo(0, h / 2);
+    c.lineTo(w, h / 2);
+    c.stroke();
+
+    var isFlat = true;
+    for (var k = 0; k < PATH_RES; k++){
+      if (CUSTOM_PATH[k] !== 0){ isFlat = false; break; }
+    }
+    if (isFlat){
+      c.fillStyle = 'rgba(216,216,220,0.55)';
+      c.font = Math.max(12, Math.round(h * 0.06)) + 'px "IBM Plex Mono", monospace';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText('여기를 드래그해서 그려보세요', w / 2, h / 2 - h * 0.12);
+      c.textAlign = 'left';
+      c.textBaseline = 'alphabetic';
+    }
+
+    c.strokeStyle = '#f4f3ee';
+    c.lineWidth = 2;
+    c.beginPath();
+    for (var i = 0; i < PATH_RES; i++){
+      var x = i / (PATH_RES - 1) * w;
+      var y = h / 2 - CUSTOM_PATH[i] * (h / 2 - 6);
+      if (i === 0) c.moveTo(x, y); else c.lineTo(x, y);
+    }
+    c.stroke();
+  }
+
+  function drawPathPreview(){
+    drawPathOn(pathCanvas, pctx);
+    if (!pathZoomOverlay.hidden) drawPathOn(pathCanvasZoom, pctxZoom);
+  }
+
+  function pathPointFromEvent(e, canvasEl){
+    var rect = canvasEl.getBoundingClientRect();
+    var x = (e.clientX - rect.left) / rect.width * canvasEl.width;
+    var y = (e.clientY - rect.top) / rect.height * canvasEl.height;
+    var idx = Math.round(x / canvasEl.width * (PATH_RES - 1));
+    idx = Math.max(0, Math.min(PATH_RES - 1, idx));
+    var nv = 1 - 2 * (y / canvasEl.height);
+    nv = Math.max(-1, Math.min(1, nv));
+    return { idx: idx, val: nv };
+  }
+
+  function paintPathPoint(idx, val){
+    if (lastPathIndex !== null && lastPathIndex !== idx){
+      var lo = Math.min(lastPathIndex, idx);
+      var hi = Math.max(lastPathIndex, idx);
+      var v0 = lastPathIndex < idx ? lastPathVal : val;
+      var v1 = lastPathIndex < idx ? val : lastPathVal;
+      for (var i = lo; i <= hi; i++){
+        var t = hi === lo ? 0 : (i - lo) / (hi - lo);
+        CUSTOM_PATH[i] = v0 + (v1 - v0) * t;
+      }
+    } else {
+      CUSTOM_PATH[idx] = val;
+    }
+    lastPathIndex = idx;
+    lastPathVal = val;
+    drawPathPreview();
+  }
+
+  function smoothCustomPath(){
+    var out = CUSTOM_PATH.slice();
+    for (var i = 0; i < PATH_RES; i++){
+      var im1 = (i - 1 + PATH_RES) % PATH_RES;
+      var ip1 = (i + 1) % PATH_RES;
+      out[i] = (CUSTOM_PATH[im1] + CUSTOM_PATH[i] * 2 + CUSTOM_PATH[ip1]) / 4;
+    }
+    CUSTOM_PATH = out;
+  }
+
+  function bindPathCanvas(canvasEl){
+    canvasEl.addEventListener('pointerdown', function(e){
+      isDrawingPath = true;
+      lastPathIndex = null;
+      try { canvasEl.setPointerCapture(e.pointerId); } catch (err) {}
+      var pv = pathPointFromEvent(e, canvasEl);
+      paintPathPoint(pv.idx, pv.val);
+      e.preventDefault();
+    });
+    canvasEl.addEventListener('pointermove', function(e){
+      if (!isDrawingPath) return;
+      var pv = pathPointFromEvent(e, canvasEl);
+      paintPathPoint(pv.idx, pv.val);
+    });
+  }
+  bindPathCanvas(pathCanvas);
+  bindPathCanvas(pathCanvasZoom);
+
+  window.addEventListener('pointerup', function(){
+    if (isDrawingPath){
+      isDrawingPath = false;
+      lastPathIndex = null;
+      smoothCustomPath();
+      drawPathPreview();
+    }
+  });
+
+  function clearCustomPath(){
+    CUSTOM_PATH = new Array(PATH_RES).fill(0);
+    drawPathPreview();
+  }
+  pathClearBtn.addEventListener('click', clearCustomPath);
+  pathClearZoomBtn.addEventListener('click', clearCustomPath);
+
+  pathZoomBtn.addEventListener('click', function(){
+    pathZoomOverlay.hidden = false;
+    drawPathOn(pathCanvasZoom, pctxZoom);
+  });
+  pathZoomCloseBtn.addEventListener('click', function(){
+    pathZoomOverlay.hidden = true;
+  });
+  pathZoomOverlay.addEventListener('click', function(e){
+    if (e.target === pathZoomOverlay) pathZoomOverlay.hidden = true;
+  });
+
+  pathAmpSlider.addEventListener('input', function(){
+    PATH_MAX_LATERAL = parseFloat(pathAmpSlider.value);
+    pathAmpVal.textContent = PATH_MAX_LATERAL.toFixed(1);
+  });
+
+  pathLenSlider.addEventListener('input', function(){
+    PATH_LOOP_LEN = parseInt(pathLenSlider.value, 10);
+    pathLenVal.textContent = PATH_LOOP_LEN;
+  });
+
+  function setCurveMode(mode){
+    CURVE_MODE = mode;
+    curveModeAutoBtn.classList.toggle('active', mode === 'auto');
+    curveModeCustomBtn.classList.toggle('active', mode === 'custom');
+    customPathRow.hidden = (mode !== 'custom');
+    curveAmpRow.classList.toggle('dimmed', mode === 'custom');
+    curveFreqRow.classList.toggle('dimmed', mode === 'custom');
+    curveRandomRow.classList.toggle('dimmed', mode === 'custom');
+    if (mode === 'custom') drawPathPreview();
+  }
+  curveModeAutoBtn.addEventListener('click', function(){ setCurveMode('auto'); });
+  curveModeCustomBtn.addEventListener('click', function(){ setCurveMode('custom'); });
+  setCurveMode('auto');
+
+  dashLenSlider.addEventListener('input', function(){
+    DASH_LEN = parseFloat(dashLenSlider.value);
+    dashLenVal.textContent = DASH_LEN.toFixed(1);
+  });
+
+  dashWidthSlider.addEventListener('input', function(){
+    DASH_WIDTH = parseFloat(dashWidthSlider.value);
+    dashWidthVal.textContent = DASH_WIDTH.toFixed(2);
+  });
+
+  markerGapSlider.addEventListener('input', function(){
+    MARKER_GAP = parseInt(markerGapSlider.value, 10);
+    markerGapVal.textContent = MARKER_GAP;
+  });
+
+  markerWSlider.addEventListener('input', function(){
+    MARKER_W = parseFloat(markerWSlider.value);
+    markerWVal.textContent = MARKER_W.toFixed(1);
+  });
+
+  markerHSlider.addEventListener('input', function(){
+    MARKER_H = parseFloat(markerHSlider.value);
+    markerHVal.textContent = MARKER_H.toFixed(1);
+  });
+
+  function setLampShape(shape){
+    LAMP_SHAPE = shape;
+    lampShapeCircleBtn.classList.toggle('active', shape === 'circle');
+    lampShapeSquareBtn.classList.toggle('active', shape === 'square');
+  }
+  lampShapeCircleBtn.addEventListener('click', function(){ setLampShape('circle'); });
+  lampShapeSquareBtn.addEventListener('click', function(){ setLampShape('square'); });
+  setLampShape('circle');
+
+  lampSizeSlider.addEventListener('input', function(){
+    LAMP_SIZE = parseFloat(lampSizeSlider.value);
+    lampSizeVal.textContent = LAMP_SIZE.toFixed(1);
+  });
+
+  lampHeightSlider.addEventListener('input', function(){
+    LAMP_HEIGHT = parseFloat(lampHeightSlider.value);
+    lampHeightVal.textContent = LAMP_HEIGHT.toFixed(1);
+  });
+
+  lampGapSlider.addEventListener('input', function(){
+    LAMP_GAP = parseInt(lampGapSlider.value, 10);
+    lampGapVal.textContent = LAMP_GAP;
+  });
+
+  buildingCountSlider.addEventListener('input', function(){
+    BUILDING_COUNT = parseInt(buildingCountSlider.value, 10);
+    buildingCountVal.textContent = BUILDING_COUNT;
+  });
+
+  function setBuildingShape(shape){
+    BUILDING_SHAPE = shape;
+    buildingShapeCircleBtn.classList.toggle('active', shape === 'circle');
+    buildingShapeSquareBtn.classList.toggle('active', shape === 'square');
+  }
+  buildingShapeCircleBtn.addEventListener('click', function(){ setBuildingShape('circle'); });
+  buildingShapeSquareBtn.addEventListener('click', function(){ setBuildingShape('square'); });
+  setBuildingShape('circle');
+
+  buildingWSlider.addEventListener('input', function(){
+    BUILDING_W = parseFloat(buildingWSlider.value);
+    buildingWVal.textContent = BUILDING_W.toFixed(1);
+  });
+
+  buildingHSlider.addEventListener('input', function(){
+    BUILDING_H = parseFloat(buildingHSlider.value);
+    buildingHVal.textContent = BUILDING_H.toFixed(1);
+  });
+
+  buildingSpreadSlider.addEventListener('input', function(){
+    BUILDING_SPREAD = parseFloat(buildingSpreadSlider.value);
+    buildingSpreadVal.textContent = BUILDING_SPREAD.toFixed(1);
+  });
+
+  buildingHeightSlider.addEventListener('input', function(){
+    BUILDING_HEIGHT = parseFloat(buildingHeightSlider.value);
+    buildingHeightVal.textContent = BUILDING_HEIGHT.toFixed(1);
+  });
+
+  buildingColor.addEventListener('input', function(){
+    BUILDING_COLOR = buildingColor.value;
+  });
+
+  buildingColorRandomSlider.addEventListener('input', function(){
+    BUILDING_COLOR_RANDOM = parseInt(buildingColorRandomSlider.value, 10);
+    buildingColorRandomVal.textContent = BUILDING_COLOR_RANDOM;
+  });
+
+  twinkleAmountSlider.addEventListener('input', function(){
+    TWINKLE_AMOUNT = parseInt(twinkleAmountSlider.value, 10);
+    twinkleAmountVal.textContent = TWINKLE_AMOUNT;
+  });
+
+  twinkleSpeedSlider.addEventListener('input', function(){
+    TWINKLE_SPEED = parseFloat(twinkleSpeedSlider.value);
+    twinkleSpeedVal.textContent = TWINKLE_SPEED.toFixed(1);
+  });
+
+  trailSlider.addEventListener('input', function(){
+    TRAIL_AMOUNT = parseInt(trailSlider.value, 10);
+    trailVal.textContent = TRAIL_AMOUNT;
+  });
+
+  bgColor.addEventListener('input', function(){
+    GROUND_COLOR = bgColor.value;
+  });
+
+  lineColor.addEventListener('input', function(){
+    LINE_COLOR = lineColor.value;
+  });
+
+  markerAColor.addEventListener('input', function(){
+    MARKER_A_COLOR = markerAColor.value;
+  });
+
+  markerBColor.addEventListener('input', function(){
+    MARKER_B_COLOR = markerBColor.value;
+  });
+
+  lampColor.addEventListener('input', function(){
+    LAMP_COLOR = lampColor.value;
+  });
+
+  roadColor.addEventListener('input', function(){
+    ROAD_COLOR = roadColor.value;
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(resizeCanvas, 200);
+  });
+
+  resizeCanvas();
+  draw();
+  requestAnimationFrame(loop);
+})();
+</script>
