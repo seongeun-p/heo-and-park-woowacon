@@ -1,0 +1,463 @@
+<title>인구들</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#0a0a0c;
+    --dot:#f4f3ee;
+    --caption:#7c7c82;
+    --panel-bg:rgba(18,18,20,0.92);
+    --panel-border:rgba(255,255,255,0.1);
+    --panel-text:#d8d8dc;
+    --panel-accent:#f4f3ee;
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--ground);
+    overscroll-behavior:none;
+  }
+
+  body{
+    overflow:hidden;
+    font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  #stage{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    background:var(--ground);
+    cursor:none;
+  }
+
+  canvas{
+    position:absolute;
+    top:0;
+    left:0;
+    display:block;
+  }
+
+  #caption{
+    position:fixed;
+    right:18px;
+    bottom:14px;
+    font-size:11px;
+    letter-spacing:.04em;
+    color:var(--caption);
+    pointer-events:none;
+    z-index:6;
+    opacity:.85;
+  }
+
+  #gearBtn{
+    position:fixed;
+    top:16px;
+    right:16px;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:1px solid var(--panel-border);
+    background:var(--panel-bg);
+    color:var(--panel-text);
+    font-size:15px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    z-index:10;
+  }
+
+  #panel{
+    position:fixed;
+    top:58px;
+    right:16px;
+    width:220px;
+    padding:16px 16px 14px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--panel-text);
+    z-index:10;
+    cursor:default;
+    box-shadow:0 12px 28px rgba(0,0,0,0.4);
+  }
+
+  #panel[hidden]{ display:none; }
+
+  #panel h2{
+    margin:0 0 12px;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--caption);
+  }
+
+  .row{ margin-bottom:12px; }
+  .row:last-of-type{ margin-bottom:0; }
+
+  .row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+
+  .row label span:last-child{
+    font-variant-numeric:tabular-nums;
+    color:var(--panel-accent);
+  }
+
+  .row input[type="range"]{
+    width:100%;
+    accent-color:var(--panel-accent);
+    cursor:pointer;
+  }
+
+  .swatchRow{
+    display:flex;
+    gap:10px;
+  }
+
+  .swatchRow .field{
+    flex:1;
+    min-width:0;
+  }
+
+  .swatchRow label{
+    display:block;
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+
+  .row input[type="color"]{
+    width:100%;
+    height:28px;
+    padding:2px;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    background:transparent;
+    cursor:pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    #stage{ display:none; }
+    #caption{ opacity:1; }
+  }
+</style>
+
+<div id="stage"><canvas id="cv"></canvas></div>
+<div id="caption">move to gather the circles</div>
+
+<button id="gearBtn" title="설정" aria-label="설정 열기">⚙</button>
+<div id="panel" hidden>
+  <h2>Circles</h2>
+  <div class="row">
+    <label><span>반응 반경</span><span id="radiusVal">160</span></label>
+    <input id="radiusSlider" type="range" min="40" max="480" step="10" value="160">
+  </div>
+  <div class="row">
+    <label><span>동그라미 크기</span><span id="sizeVal">7</span></label>
+    <input id="sizeSlider" type="range" min="2" max="140" step="1" value="7">
+  </div>
+  <div class="row">
+    <label><span>밀도</span><span id="densityVal">160</span></label>
+    <input id="densitySlider" type="range" min="20" max="500" step="10" value="160">
+  </div>
+  <div class="row">
+    <label><span>움직임 정도</span><span id="intensityVal">35</span></label>
+    <input id="intensitySlider" type="range" min="0" max="100" step="5" value="35">
+  </div>
+  <div class="row">
+    <label><span>아웃라인</span><span id="outlineVal">0</span></label>
+    <input id="outlineSlider" type="range" min="0" max="10" step="0.5" value="0">
+  </div>
+  <div class="row">
+    <label><span>흐름 정도</span><span id="followVal">0</span></label>
+    <input id="followSlider" type="range" min="0" max="100" step="5" value="0">
+  </div>
+  <div class="row">
+    <label><span>속도</span><span id="speedVal">100</span></label>
+    <input id="speedSlider" type="range" min="10" max="300" step="10" value="100">
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>배경색</label>
+      <input id="bgColor" type="color" value="#0a0a0c">
+    </div>
+    <div class="field">
+      <label>원 색상</label>
+      <input id="dotColor" type="color" value="#f4f3ee">
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var stage = document.getElementById('stage');
+  var canvas = document.getElementById('cv');
+  var ctx = canvas.getContext('2d');
+  var gearBtn = document.getElementById('gearBtn');
+  var panel = document.getElementById('panel');
+
+  var radiusSlider = document.getElementById('radiusSlider');
+  var sizeSlider = document.getElementById('sizeSlider');
+  var densitySlider = document.getElementById('densitySlider');
+  var intensitySlider = document.getElementById('intensitySlider');
+  var outlineSlider = document.getElementById('outlineSlider');
+  var followSlider = document.getElementById('followSlider');
+  var speedSlider = document.getElementById('speedSlider');
+  var bgColor = document.getElementById('bgColor');
+  var dotColor = document.getElementById('dotColor');
+  var radiusVal = document.getElementById('radiusVal');
+  var sizeVal = document.getElementById('sizeVal');
+  var densityVal = document.getElementById('densityVal');
+  var intensityVal = document.getElementById('intensityVal');
+  var outlineVal = document.getElementById('outlineVal');
+  var followVal = document.getElementById('followVal');
+  var speedVal = document.getElementById('speedVal');
+
+  // ---- tunables, all live-adjustable from the panel ----
+  var RADIUS = 160;      // 반응 반경: how far the mouse's swarm influence reaches
+  var SIZE = 7;           // 동그라미 크기: every circle's radius (all uniform)
+  var DENSITY = 160;      // 밀도: circle count
+  var INTENSITY = 35;     // 움직임 정도: 0 = barely drifting, 100 = restless
+  var OUTLINE = 0;        // 아웃라인: stroke width around each circle
+  var FOLLOW = 0;         // 흐름 정도: how strongly every circle (not just the swarm) drifts toward the mouse
+  var FOLLOW_MAX = 1.4;   // top drift speed added at FOLLOW = 100
+  var SPEED = 100;        // 속도: overall movement-speed multiplier, as a percent (100 = normal)
+  var BG_COLOR = '#0a0a0c';   // 배경색
+  var DOT_COLOR = '#f4f3ee';  // 원 색상
+
+  // fixed feel constants — scaled by INTENSITY at runtime. No springs/velocity
+  // are used for the mouse-orbit behavior, so there is no elastic overshoot —
+  // circles simply ease toward a point that slowly revolves around the mouse.
+  var ORBIT_SPEED = 0.02; // baseline angular speed for revolving around the mouse
+  var EASE = 0.05;        // baseline pursuit ease toward the orbit point (no overshoot)
+  var WANDER_MAX = 0.5;   // ambient drift speed when not swarming
+  var TURN_MAX = 0.2;     // how sharply the ambient heading can turn per frame
+  var FRICTION = 0.9;     // velocity damping for ambient wander only
+
+  var dpr = Math.min(window.devicePixelRatio || 1, 2);
+  var W = 0, H = 0;
+  var circles = [];
+  var mouseX = -9999, mouseY = -9999;
+  var inside = false;
+
+  function resizeCanvas(){
+    W = stage.clientWidth;
+    H = stage.clientHeight;
+    canvas.width = W * dpr;
+    canvas.height = H * dpr;
+    canvas.style.width = W + 'px';
+    canvas.style.height = H + 'px';
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  }
+
+  function makeCircle(){
+    return {
+      x: Math.random() * W,
+      y: Math.random() * H,
+      theta: Math.random() * Math.PI * 2,
+      vx: 0,
+      vy: 0,
+      orbitAngle: Math.random() * Math.PI * 2,
+      orbitFrac: 0.32 + Math.random() * 0.56, // preferred distance from the mouse, as a share of RADIUS
+      orbitDir: Math.random() < 0.5 ? 1 : -1,  // clockwise or counter-clockwise
+      orbitSpeed: 0.7 + Math.random() * 0.6
+    };
+  }
+
+  function build(){
+    circles = [];
+    for (var i = 0; i < DENSITY; i++) circles.push(makeCircle());
+  }
+
+  function step(dtScale){
+    var k = INTENSITY / 100;
+    var speedMul = SPEED / 100; // 속도: uniform multiplier over every motion below
+
+    for (var i = 0; i < circles.length; i++){
+      var c = circles[i];
+
+      var captured = false;
+      if (inside){
+        var ddx = c.x - mouseX;
+        var ddy = c.y - mouseY;
+        if (ddx * ddx + ddy * ddy < RADIUS * RADIUS) captured = true;
+      }
+
+      if (captured){
+        // no springs, no velocity to overshoot with — the circle simply eases,
+        // frame by frame, toward a point that slowly revolves around the mouse
+        // at its own preferred distance. Pure pursuit, so it can't feel "tense".
+        c.orbitAngle += ORBIT_SPEED * (0.3 + k) * speedMul * c.orbitDir * c.orbitSpeed * dtScale;
+        var orbitR = RADIUS * c.orbitFrac;
+        var tx = mouseX + Math.cos(c.orbitAngle) * orbitR;
+        var ty = mouseY + Math.sin(c.orbitAngle) * orbitR;
+        // clamp so a high SPEED (or a slow frame) can't push the ease past 1 and overshoot
+        var ease = Math.min(0.9, EASE * (0.35 + 0.65 * k) * speedMul * dtScale);
+        c.x += (tx - c.x) * ease;
+        c.y += (ty - c.y) * ease;
+        c.vx = 0;
+        c.vy = 0;
+        c.theta = c.orbitAngle;
+      } else {
+        // ambient random wander: the heading slowly drifts (calmer at low intensity)
+        c.theta += (Math.random() - 0.5) * TURN_MAX * (0.35 + k) * dtScale;
+        var wander = WANDER_MAX * k * speedMul * dtScale;
+        var wx = Math.cos(c.theta) * wander;
+        var wy = Math.sin(c.theta) * wander;
+
+        // 흐름 정도: on top of the ambient wander, every circle — even ones far
+        // outside the reaction radius — can be nudged to drift toward wherever
+        // the mouse currently is, so the whole field leans the same direction.
+        if (inside && FOLLOW > 0){
+          var fdx = mouseX - c.x, fdy = mouseY - c.y;
+          var fdist = Math.sqrt(fdx * fdx + fdy * fdy);
+          if (fdist > 1){
+            var followSpeed = (FOLLOW / 100) * FOLLOW_MAX * speedMul * dtScale;
+            wx += (fdx / fdist) * followSpeed;
+            wy += (fdy / fdist) * followSpeed;
+          }
+        }
+
+        c.vx = c.vx * FRICTION + wx;
+        c.vy = c.vy * FRICTION + wy;
+
+        c.x += c.vx;
+        c.y += c.vy;
+      }
+
+      // soft bounce off the edges, reflecting the wander heading too
+      if (c.x < SIZE){ c.x = SIZE; c.theta = Math.PI - c.theta; }
+      else if (c.x > W - SIZE){ c.x = W - SIZE; c.theta = Math.PI - c.theta; }
+      if (c.y < SIZE){ c.y = SIZE; c.theta = -c.theta; }
+      else if (c.y > H - SIZE){ c.y = H - SIZE; c.theta = -c.theta; }
+    }
+  }
+
+  function draw(){
+    ctx.fillStyle = BG_COLOR;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.fillStyle = DOT_COLOR;
+    ctx.strokeStyle = DOT_COLOR;
+    ctx.lineWidth = OUTLINE;
+    ctx.shadowColor = DOT_COLOR;
+    ctx.shadowBlur = 6;
+
+    for (var i = 0; i < circles.length; i++){
+      var c = circles[i];
+      ctx.beginPath();
+      ctx.arc(c.x, c.y, SIZE, 0, Math.PI * 2);
+      if (OUTLINE > 0) ctx.stroke();
+      else ctx.fill();
+    }
+
+    ctx.shadowBlur = 0;
+  }
+
+  var reduceMotion = window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  // motion is timed against the clock, not the frame — so if the browser (or a
+  // screen recorder capturing it) drops frames under load, playback speed stays
+  // correct instead of stuttering or lurching forward to catch up.
+  var lastT = null;
+
+  function loop(now){
+    if (lastT === null) lastT = now;
+    var dt = now - lastT;
+    lastT = now;
+    var dtScale = dt / (1000 / 60);
+    dtScale = Math.max(0.2, Math.min(dtScale, 2.5));
+
+    if (!reduceMotion){
+      step(dtScale);
+      draw();
+    }
+    requestAnimationFrame(loop);
+  }
+
+  stage.addEventListener('mousemove', function(e){
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    inside = true;
+  });
+
+  stage.addEventListener('mouseleave', function(){ inside = false; });
+
+  window.addEventListener('mouseout', function(e){
+    if (!e.relatedTarget && !e.toElement) inside = false;
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function(){
+      resizeCanvas();
+      build();
+    }, 200);
+  });
+
+  // ---- live settings panel ----
+  gearBtn.addEventListener('click', function(){
+    panel.hidden = !panel.hidden;
+  });
+
+  radiusSlider.addEventListener('input', function(){
+    RADIUS = parseInt(radiusSlider.value, 10);
+    radiusVal.textContent = RADIUS;
+  });
+
+  sizeSlider.addEventListener('input', function(){
+    SIZE = parseInt(sizeSlider.value, 10);
+    sizeVal.textContent = SIZE;
+  });
+
+  densitySlider.addEventListener('input', function(){
+    DENSITY = parseInt(densitySlider.value, 10);
+    densityVal.textContent = DENSITY;
+    build();
+  });
+
+  intensitySlider.addEventListener('input', function(){
+    INTENSITY = parseInt(intensitySlider.value, 10);
+    intensityVal.textContent = INTENSITY;
+  });
+
+  outlineSlider.addEventListener('input', function(){
+    OUTLINE = parseFloat(outlineSlider.value);
+    outlineVal.textContent = OUTLINE;
+  });
+
+  followSlider.addEventListener('input', function(){
+    FOLLOW = parseInt(followSlider.value, 10);
+    followVal.textContent = FOLLOW;
+  });
+
+  speedSlider.addEventListener('input', function(){
+    SPEED = parseInt(speedSlider.value, 10);
+    speedVal.textContent = SPEED;
+  });
+
+  bgColor.addEventListener('input', function(){
+    BG_COLOR = bgColor.value;
+    document.documentElement.style.setProperty('--ground', BG_COLOR);
+  });
+
+  dotColor.addEventListener('input', function(){
+    DOT_COLOR = dotColor.value;
+    document.documentElement.style.setProperty('--dot', DOT_COLOR);
+  });
+
+  resizeCanvas();
+  build();
+  draw();
+  requestAnimationFrame(loop);
+})();
+</script>

@@ -1,0 +1,515 @@
+<title>빛무리</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+  :root{
+    --ground:#0a0a0c;
+    --off:#0a0a0c;
+    --on:#f4f3ee;
+    --caption:#7c7c82;
+    --panel-bg:rgba(18,18,20,0.92);
+    --panel-border:rgba(255,255,255,0.1);
+    --panel-text:#d8d8dc;
+    --panel-accent:#f4f3ee;
+  }
+
+  *{box-sizing:border-box;}
+
+  html,body{
+    height:100%;
+    margin:0;
+    background:var(--ground);
+    overscroll-behavior:none;
+  }
+
+  body{
+    overflow:hidden;
+    font-family:'IBM Plex Mono', ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  #stage{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    background:var(--ground);
+    cursor:none;
+    user-select:none;
+    -webkit-user-select:none;
+  }
+
+  .cell{
+    position:absolute;
+    box-sizing:border-box;
+    background:var(--off);
+    border:var(--cell-outline-width, 0px) solid transparent;
+    transition:background-color .05s linear;
+    will-change:background-color;
+    pointer-events:none;
+  }
+
+  .cell.on{
+    background:var(--on);
+    border-color:var(--cell-outline-color, transparent);
+  }
+
+  #caption{
+    position:fixed;
+    right:18px;
+    bottom:14px;
+    font-size:11px;
+    letter-spacing:.04em;
+    color:var(--caption);
+    pointer-events:none;
+    z-index:6;
+    opacity:.85;
+  }
+
+  #gearBtn{
+    position:fixed;
+    top:16px;
+    right:16px;
+    width:34px;
+    height:34px;
+    border-radius:50%;
+    border:1px solid var(--panel-border);
+    background:var(--panel-bg);
+    color:var(--panel-text);
+    font-size:15px;
+    line-height:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    cursor:pointer;
+    z-index:10;
+  }
+
+  #panel{
+    position:fixed;
+    top:58px;
+    right:16px;
+    width:220px;
+    padding:16px 16px 14px;
+    background:var(--panel-bg);
+    border:1px solid var(--panel-border);
+    border-radius:10px;
+    color:var(--panel-text);
+    z-index:10;
+    cursor:default;
+    box-shadow:0 12px 28px rgba(0,0,0,0.4);
+  }
+
+  #panel[hidden]{ display:none; }
+
+  #panel h2{
+    margin:0 0 12px;
+    font-size:11px;
+    font-weight:500;
+    letter-spacing:.08em;
+    text-transform:uppercase;
+    color:var(--caption);
+  }
+
+  .row{
+    margin-bottom:12px;
+  }
+
+  .row label{
+    display:flex;
+    justify-content:space-between;
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+
+  .row label span:last-child{
+    font-variant-numeric:tabular-nums;
+    color:var(--panel-accent);
+  }
+
+  .row input[type="range"]{
+    width:100%;
+    accent-color:var(--panel-accent);
+    cursor:pointer;
+  }
+
+  #resetBtn{
+    width:100%;
+    margin-top:4px;
+    padding:8px 0;
+    background:transparent;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    color:var(--panel-text);
+    font-family:inherit;
+    font-size:11.5px;
+    letter-spacing:.03em;
+    cursor:pointer;
+  }
+
+  #resetBtn:hover{
+    border-color:var(--panel-accent);
+    color:var(--panel-accent);
+  }
+
+  .swatchRow{
+    display:flex;
+    gap:10px;
+  }
+
+  .swatchRow .field{
+    flex:1;
+    min-width:0;
+  }
+
+  .swatchRow label{
+    display:block;
+    font-size:11.5px;
+    margin-bottom:6px;
+  }
+
+  .row input[type="color"]{
+    width:100%;
+    height:28px;
+    padding:2px;
+    border:1px solid var(--panel-border);
+    border-radius:6px;
+    background:transparent;
+    cursor:pointer;
+  }
+
+  @media (prefers-reduced-motion: reduce){
+    .cell{ transition:none; }
+  }
+</style>
+
+<div id="stage"></div>
+<div id="caption">move to light the grid · trail stays lit</div>
+
+<button id="gearBtn" title="설정" aria-label="설정 열기">⚙</button>
+<div id="panel" hidden>
+  <h2>Grid</h2>
+  <div class="row">
+    <label><span>width</span><span id="widthVal">60</span></label>
+    <input id="widthSlider" type="range" min="12" max="160" step="2" value="60">
+  </div>
+  <div class="row">
+    <label><span>height</span><span id="heightVal">40</span></label>
+    <input id="heightSlider" type="range" min="12" max="160" step="2" value="40">
+  </div>
+  <div class="row">
+    <label><span>height random</span><span id="heightRandVal">0</span></label>
+    <input id="heightRandSlider" type="range" min="0" max="100" step="5" value="0">
+  </div>
+  <div class="row">
+    <label><span>좌우 간격 (h-gap)</span><span id="gapXVal">10</span></label>
+    <input id="gapXSlider" type="range" min="0" max="48" step="1" value="10">
+  </div>
+  <div class="row">
+    <label><span>상하 간격 (v-gap)</span><span id="gapYVal">10</span></label>
+    <input id="gapYSlider" type="range" min="0" max="48" step="1" value="10">
+  </div>
+  <div class="row">
+    <label><span>flicker random</span><span id="flickerVal">40</span></label>
+    <input id="flickerSlider" type="range" min="0" max="100" step="5" value="40">
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>배경색</label>
+      <input id="bgColor" type="color" value="#0a0a0c">
+    </div>
+    <div class="field">
+      <label>켜진 색</label>
+      <input id="onColor" type="color" value="#f4f3ee">
+    </div>
+  </div>
+  <div class="row">
+    <label><span>아웃라인 두께</span><span id="outlineWidthVal">0</span></label>
+    <input id="outlineWidthSlider" type="range" min="0" max="10" step="1" value="0">
+  </div>
+  <div class="row swatchRow">
+    <div class="field">
+      <label>아웃라인 색</label>
+      <input id="outlineColor" type="color" value="#000000">
+    </div>
+  </div>
+  <button id="resetBtn">reset lit cells</button>
+</div>
+
+<script>
+(function(){
+  var stage = document.getElementById('stage');
+  var gearBtn = document.getElementById('gearBtn');
+  var panel = document.getElementById('panel');
+  var widthSlider = document.getElementById('widthSlider');
+  var heightSlider = document.getElementById('heightSlider');
+  var heightRandSlider = document.getElementById('heightRandSlider');
+  var gapXSlider = document.getElementById('gapXSlider');
+  var gapYSlider = document.getElementById('gapYSlider');
+  var flickerSlider = document.getElementById('flickerSlider');
+  var widthVal = document.getElementById('widthVal');
+  var heightVal = document.getElementById('heightVal');
+  var heightRandVal = document.getElementById('heightRandVal');
+  var gapXVal = document.getElementById('gapXVal');
+  var gapYVal = document.getElementById('gapYVal');
+  var flickerVal = document.getElementById('flickerVal');
+  var resetBtn = document.getElementById('resetBtn');
+
+  // cell width / height / gaps are all independently adjustable from the panel.
+  var CELL_W = 60;
+  var CELL_H = 40;
+  var HEIGHT_RAND = 0; // 0-100, how much each cell's height varies from CELL_H
+  var GAP_X = 10; // 좌우 간격 (horizontal gap, between columns)
+  var GAP_Y = 10; // 상하 간격 (vertical gap, between rows)
+  var FLICKER = 40; // 0-100, how erratic the "lamp starting up" flicker is
+
+  var grid = [];      // grid[row][col] = cell record
+  var litCells = [];  // flat list of every cell ever lit, for the reset button
+  var cols = 0, rows = 0;
+  var originX = 0, originY = 0;
+  var stepX = CELL_W + GAP_X;
+  var stepY = CELL_H + GAP_Y;
+
+  var RADIUS = 100;
+
+  var mouseX = -9999, mouseY = -9999;
+  var inside = false;
+  var pending = false;
+
+  // picks one cell's height around the CELL_H baseline. HEIGHT_RAND (0-100)
+  // controls how far it can stray — 0 means every cell is exactly CELL_H.
+  function rollHeight(){
+    if (HEIGHT_RAND <= 0) return CELL_H;
+    var spread = HEIGHT_RAND / 100;
+    var minFactor = 1 - spread * 0.85;
+    var maxFactor = 1 + spread * 0.5;
+    var h = CELL_H * (minFactor + Math.random() * (maxFactor - minFactor));
+    return Math.max(3, Math.round(h));
+  }
+
+  function makeCell(x, yTop){
+    var h = rollHeight();
+    var y = yTop + (CELL_H - h) / 2; // keep it centered on the row's centerline
+    var el = document.createElement('div');
+    el.className = 'cell';
+    el.style.left = x + 'px';
+    el.style.top = y + 'px';
+    el.style.width = CELL_W + 'px';
+    el.style.height = h + 'px';
+    stage.appendChild(el);
+    return {
+      el: el,
+      cx: x + CELL_W / 2,
+      cy: y + h / 2,
+      lit: false,
+      triggered: false,
+      timers: null
+    };
+  }
+
+  function build(){
+    for (var li = 0; li < litCells.length; li++){
+      if (litCells[li].timers){
+        for (var lj = 0; lj < litCells[li].timers.length; lj++) clearTimeout(litCells[li].timers[lj]);
+      }
+    }
+    stage.innerHTML = '';
+    grid = [];
+    litCells = [];
+
+    stepX = CELL_W + GAP_X;
+    stepY = CELL_H + GAP_Y;
+
+    var w = stage.clientWidth;
+    var h = stage.clientHeight;
+
+    cols = Math.max(1, Math.floor((w + GAP_X) / stepX));
+    rows = Math.max(1, Math.floor((h + GAP_Y) / stepY));
+
+    var usedW = cols * stepX - GAP_X;
+    var usedH = rows * stepY - GAP_Y;
+    originX = (w - usedW) / 2;
+    originY = (h - usedH) / 2;
+
+    for (var r = 0; r < rows; r++){
+      var rowCells = [];
+      var y = originY + r * stepY;
+      for (var c = 0; c < cols; c++){
+        var x = originX + c * stepX;
+        rowCells.push(makeCell(x, y));
+      }
+      grid.push(rowCells);
+    }
+  }
+
+  // lights a cell like a fluorescent tube starting up: a few random
+  // on/off blinks, then it settles on for good. FLICKER (0-100) controls
+  // how many blinks there are and how uneven their timing is.
+  function light(rec){
+    if (rec.triggered) return;
+    rec.triggered = true;
+    litCells.push(rec);
+
+    var randomness = FLICKER / 100;
+    var blinkCount = 2 + Math.floor(Math.random() * (1 + randomness * 6));
+    var timers = [];
+    var t = 0;
+    var on = true;
+
+    for (var i = 0; i < blinkCount; i++){
+      var dur = 18 + Math.random() * (16 + randomness * 90);
+      t += dur;
+      (function(delay, state){
+        timers.push(setTimeout(function(){
+          if (state) rec.el.classList.add('on');
+          else rec.el.classList.remove('on');
+        }, delay));
+      })(t, on);
+      on = !on;
+    }
+
+    t += 30 + Math.random() * 40;
+    timers.push(setTimeout(function(){
+      rec.el.classList.add('on');
+      rec.lit = true;
+    }, t));
+
+    rec.timers = timers;
+  }
+
+  function clearLit(){
+    for (var i = 0; i < litCells.length; i++){
+      var rec = litCells[i];
+      if (rec.timers){
+        for (var j = 0; j < rec.timers.length; j++) clearTimeout(rec.timers[j]);
+        rec.timers = null;
+      }
+      rec.lit = false;
+      rec.triggered = false;
+      rec.el.classList.remove('on');
+    }
+    litCells = [];
+  }
+
+  // once a cell starts lighting up from the mouse's path, it keeps going and
+  // stays lit — this only ever turns cells on, never back off.
+  function frame(){
+    pending = false;
+    if (!inside) return;
+
+    var colF = (mouseX - originX) / stepX;
+    var rowF = (mouseY - originY) / stepY;
+    var reachCols = Math.ceil(RADIUS / stepX) + 1;
+    var reachRows = Math.ceil(RADIUS / stepY) + 1;
+
+    var rMin = Math.max(0, Math.floor(rowF - reachRows));
+    var rMax = Math.min(rows - 1, Math.ceil(rowF + reachRows));
+    var cMin = Math.max(0, Math.floor(colF - reachCols));
+    var cMax = Math.min(cols - 1, Math.ceil(colF + reachCols));
+
+    for (var r = rMin; r <= rMax; r++){
+      var rowCells = grid[r];
+      if (!rowCells) continue;
+      for (var c = cMin; c <= cMax; c++){
+        var rec = rowCells[c];
+        if (!rec || rec.triggered) continue;
+        var dx = mouseX - rec.cx;
+        var dy = mouseY - rec.cy;
+        var dist = Math.sqrt(dx * dx + dy * dy);
+        if (dist <= RADIUS) light(rec);
+      }
+    }
+  }
+
+  function requestFrame(){
+    if (!pending){
+      pending = true;
+      requestAnimationFrame(frame);
+    }
+  }
+
+  stage.addEventListener('mousemove', function(e){
+    mouseX = e.clientX;
+    mouseY = e.clientY;
+    inside = true;
+    requestFrame();
+  });
+
+  stage.addEventListener('mouseleave', function(){
+    inside = false;
+  });
+
+  window.addEventListener('mouseout', function(e){
+    if (!e.relatedTarget && !e.toElement) inside = false;
+  });
+
+  var resizeTimer;
+  window.addEventListener('resize', function(){
+    clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(build, 200);
+  });
+
+  // ---- live settings panel ----
+  gearBtn.addEventListener('click', function(){
+    panel.hidden = !panel.hidden;
+  });
+
+  widthSlider.addEventListener('input', function(){
+    CELL_W = parseInt(widthSlider.value, 10);
+    widthVal.textContent = CELL_W;
+    build();
+  });
+
+  heightSlider.addEventListener('input', function(){
+    CELL_H = parseInt(heightSlider.value, 10);
+    heightVal.textContent = CELL_H;
+    build();
+  });
+
+  heightRandSlider.addEventListener('input', function(){
+    HEIGHT_RAND = parseInt(heightRandSlider.value, 10);
+    heightRandVal.textContent = HEIGHT_RAND;
+    build();
+  });
+
+  gapXSlider.addEventListener('input', function(){
+    GAP_X = parseInt(gapXSlider.value, 10);
+    gapXVal.textContent = GAP_X;
+    build();
+  });
+
+  gapYSlider.addEventListener('input', function(){
+    GAP_Y = parseInt(gapYSlider.value, 10);
+    gapYVal.textContent = GAP_Y;
+    build();
+  });
+
+  flickerSlider.addEventListener('input', function(){
+    FLICKER = parseInt(flickerSlider.value, 10);
+    flickerVal.textContent = FLICKER;
+  });
+
+  resetBtn.addEventListener('click', clearLit);
+
+  var bgColor = document.getElementById('bgColor');
+  var onColor = document.getElementById('onColor');
+  bgColor.addEventListener('input', function(){
+    document.documentElement.style.setProperty('--ground', bgColor.value);
+    document.documentElement.style.setProperty('--off', bgColor.value);
+  });
+  onColor.addEventListener('input', function(){
+    document.documentElement.style.setProperty('--on', onColor.value);
+  });
+
+  var outlineWidthSlider = document.getElementById('outlineWidthSlider');
+  var outlineWidthVal = document.getElementById('outlineWidthVal');
+  var outlineColor = document.getElementById('outlineColor');
+  outlineWidthSlider.addEventListener('input', function(){
+    var w = parseInt(outlineWidthSlider.value, 10);
+    outlineWidthVal.textContent = w;
+    document.documentElement.style.setProperty('--cell-outline-width', w + 'px');
+  });
+  outlineColor.addEventListener('input', function(){
+    document.documentElement.style.setProperty('--cell-outline-color', outlineColor.value);
+  });
+
+  build();
+})();
+</script>
