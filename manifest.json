@@ -1,5 +1,19 @@
 [
   {
+    "file": "dot-mask.html",
+    "title": "Dot Mask — 깜빡이는 점 마스크",
+    "description": "검정 배경에 흰 점들이 마스크 영역을 채우는 인터랙션. 회색 영역은 큰 점, 빨강 영역은 촘촘한 작은 점으로 깜빡인다.",
+    "author": "seongeun-p",
+    "date": "2026-09-02T23:15:03+09:00"
+  },
+  {
+    "file": "traffic-flow.html",
+    "title": "Traffic Flow — 흐르는 도로",
+    "description": "검정 배경 위 도로를 흰 사각형(자동차)들이 양방향으로 부드럽게 흐르며 잔상을 남기는 모션그래픽. 중앙선 위는 왼쪽, 아래는 오른쪽으로 이동.",
+    "author": "seongeun-p",
+    "date": "2026-09-02T23:15:03+09:00"
+  },
+  {
     "file": "red-squares.html",
     "title": "Squares in Region — 색 조절 가능",
     "description": "mask 영역을 따라 배치된 사각형이 지글대는 인터랙션. 배경색과 사각형 색을 자유롭게 바꿀 수 있어요.",
