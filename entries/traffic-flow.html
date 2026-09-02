@@ -1,0 +1,283 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Traffic Flow — 흐르는 도로</title>
+  <meta name="description" content="검정 배경 위 도로를 흰 사각형(자동차)들이 양방향으로 부드럽게 흐르며 잔상을 남기는 모션그래픽. 중앙선 위는 왼쪽, 아래는 오른쪽으로 이동." />
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { height: 100%; }
+    body { overflow: hidden; background: #000; }
+    canvas { display: block; }
+    #panel {
+      position: fixed; right: 14px; bottom: 14px;
+      background: rgba(0,0,0,0.65); color: #eee;
+      padding: 10px 12px; border-radius: 8px;
+      font: 11px/1.45 -apple-system, BlinkMacSystemFont, sans-serif;
+      width: 220px; border: 1px solid #333; z-index: 10;
+      backdrop-filter: blur(4px);
+    }
+    #panel strong { font-size: 12px; color:#fff; }
+    #panel label { display:block; margin-top:7px; color:#9a9a9a; }
+    #panel input[type=range]{ width:100%; height: 14px; }
+    #panel select { width:100%; margin-top:2px; font-size:11px; padding:2px; background:#111; color:#eee; border:1px solid #333; }
+    #panel .v { float:right; color:#fff; }
+    #panel .sec { margin-top:9px; padding-top:7px; border-top:1px solid #2a2a2a; color:#bbb; font-size:10px; }
+    #panel .row2 { display:flex; gap:8px; }
+    #panel .row2 > div { flex:1; }
+    #panel .colorRow { display:flex; align-items:center; gap:6px; margin-top:7px; }
+    #panel .colorRow label { margin:0; }
+    #panel input[type=color]{ width:26px; height:18px; padding:0; border:none; background:none; cursor:pointer; }
+    #panel .hint { margin-top:9px; color:#777; font-size:10px; }
+  </style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="panel">
+  <strong>Traffic Flow</strong>
+
+  <div class="sec">도로</div>
+  <label>도로 높이 <span class="v" id="vRoad">0.42</span></label>
+  <input type="range" id="road" min="0.1" max="1" step="0.02" value="0.42">
+  <label>차선 개수(방향당) <span class="v" id="vLanes">6</span></label>
+  <input type="range" id="lanes" min="1" max="16" step="1" value="6">
+
+  <div class="sec">자동차(사각형)</div>
+  <label>기본 길이 <span class="v" id="vLen">40</span></label>
+  <input type="range" id="len" min="6" max="160" step="2" value="40">
+  <label>길이 편차 <span class="v" id="vLenVar">0.7</span></label>
+  <input type="range" id="lenVar" min="0" max="1" step="0.05" value="0.7">
+  <label>밀도 <span class="v" id="vDensity">0.5</span></label>
+  <input type="range" id="density" min="0.05" max="1" step="0.05" value="0.5">
+  <label>두께 채움 <span class="v" id="vFillH">0.8</span></label>
+  <input type="range" id="fillH" min="0.2" max="1" step="0.05" value="0.8">
+
+  <div class="sec">모션</div>
+  <label>속도 <span class="v" id="vSpeed">1.0</span></label>
+  <input type="range" id="speed" min="0" max="4" step="0.05" value="1.0">
+  <label>속도 편차(차선별) <span class="v" id="vSpeedVar">0.5</span></label>
+  <input type="range" id="speedVar" min="0" max="1" step="0.05" value="0.5">
+
+  <div class="sec">잔상(세로선)</div>
+  <label>잔상 길이 <span class="v" id="vTrail">0.85</span></label>
+  <input type="range" id="trail" min="0.1" max="4" step="0.05" value="0.85">
+  <label>세로선 촘촘함 <span class="v" id="vStamp">6</span></label>
+  <input type="range" id="stamp" min="2" max="30" step="1" value="6">
+  <label>세로선 두께 <span class="v" id="vSlw">2</span></label>
+  <input type="range" id="slw" min="1" max="8" step="0.5" value="2">
+
+  <div class="sec">색</div>
+  <div class="colorRow">
+    <label>배경</label><input type="color" id="bg" value="#000000">
+    <label>차</label><input type="color" id="fg" value="#ffffff">
+  </div>
+
+  <div class="hint">H: 패널 숨기기 · R: 재생성</div>
+</div>
+<script>
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+let W, H;
+
+const P = {
+  road: 0.42,      // 도로 높이(화면 비율)
+  lanes: 6,        // 방향당 차선 수
+  len: 40,         // 기본 자동차 길이(px)
+  lenVar: 0.7,     // 길이 편차
+  density: 0.5,    // 차선당 채움 밀도
+  fillH: 0.8,      // 차선 높이 대비 사각형 두께 비율
+  speed: 1.0,
+  speedVar: 0.5,   // 차선별 속도 편차
+  trail: 0.85,     // 잔상 수명(초). 클수록 세로선이 오래 남음
+  stamp: 6,        // 세로선 촘촘함(px 간격이 작을수록 촘촘) — 값이 곧 간격
+  slw: 2,          // 세로선 두께(px)
+  bg: '#000000',
+  fg: '#ffffff'
+};
+
+function makeRng(s) {
+  return function () {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    return s / 0x7fffffff;
+  };
+}
+
+// ─── 도로/차선/자동차 구성 ───────────────────────────────
+// 도로: 화면 세로 중앙에 위치한 가로 띠.
+// 방향당 lanes개 차선. 위쪽 절반 = 왼쪽으로(-x), 아래쪽 절반 = 오른쪽으로(+x).
+// 각 차선은 자동차(사각형) 배열을 가지며, 차선 전체가 x오프셋으로 흐른다(모듈러 반복).
+let road = { top: 0, height: 0, centerY: 0 };
+let lanes = [];
+
+function build() {
+  lanes = [];
+  const rng = makeRng(4321);
+
+  const roadH = H * P.road;
+  road.top = (H - roadH) / 2;
+  road.height = roadH;
+  road.centerY = H / 2;
+
+  const perDir = Math.round(P.lanes);
+  const totalLanes = perDir * 2;
+  const laneH = roadH / totalLanes;
+
+  for (let i = 0; i < totalLanes; i++) {
+    const laneTop = road.top + i * laneH;
+    const laneCenterY = laneTop + laneH / 2;
+    // 위쪽 절반은 왼쪽(-1), 아래쪽 절반은 오른쪽(+1)
+    const dir = (i < perDir) ? -1 : 1;
+
+    // 차선별 속도(편차 적용)
+    const speedMul = 1 + (rng() - 0.5) * 2 * P.speedVar;
+
+    // 이 차선을 자동차로 채운다. 각 자동차는 실제 x좌표를 갖고 연속 이동.
+    // 화면 폭보다 넓게 깔아, 화면을 벗어나면 반대편으로 재진입(wrap).
+    const carThick = laneH * P.fillH;
+    const cars = [];
+    const spanW = W * 1.6;   // 자동차들이 순환하는 총 폭
+    let x = -W * 0.3;
+    while (x < spanW) {
+      const baseLen = P.len;
+      const len = Math.max(3, baseLen * (1 + (rng() - 0.5) * 2 * P.lenVar));
+      const gapAfter = len * (0.4 + (1 - P.density) * 3) * (0.6 + rng() * 0.8);
+      if (rng() < P.density) {
+        cars.push({ x, len, thick: carThick, lastStampX: x });
+      }
+      x += len + gapAfter;
+    }
+
+    lanes.push({
+      centerY: laneCenterY,
+      dir, speedMul,
+      cars,
+      wrapMin: -W * 0.3,
+      wrapMax: spanW,
+      wrapSpan: spanW - (-W * 0.3),
+      stamps: []   // 지나간 자리에 남는 세로선들 {x, y, h, born}
+    });
+  }
+}
+
+// ─── 렌더 (잔상 포함) ─────────────────────────────────────
+let start = performance.now();
+
+let lastT = 0;
+
+function draw(now) {
+  requestAnimationFrame(draw);
+  const t = (now - start) / 1000;
+  let dt = t - lastT; lastT = t;
+  if (dt > 0.1) dt = 0.1;
+  if (dt < 0) dt = 0;
+
+  // 잔상 방식: 이전 프레임을 남기지 않고 매 프레임 완전히 지운 뒤,
+  // "자동차가 지나간 자리에 찍힌 세로선(스탬프)"들을 나이에 따라 페이드하며 다시 그린다.
+  ctx.fillStyle = P.bg;
+  ctx.fillRect(0, 0, W, H);
+
+  const life = P.trail;                 // 스탬프 수명(초)
+  const stampGap = P.stamp;             // 세로선 간격(px) — 작을수록 촘촘
+  const slw = P.slw;                    // 세로선 두께
+  const fgc = hexRGB(P.fg);
+
+  for (const lane of lanes) {
+    const vel = 220 * P.speed * lane.speedMul * lane.dir; // px/초 (부호=방향)
+    const carThick = lane.cars.length ? lane.cars[0].thick : 4;
+    const stampH = carThick;            // 세로선 높이 = 차선 두께
+
+    // 1) 자동차 이동 + 스탬프 생성
+    const dirSign = vel === 0 ? 0 : (vel > 0 ? 1 : -1);
+    for (const car of lane.cars) {
+      car.x += vel * dt;
+      // 화면(순환 구간) 밖으로 나가면 반대편으로 재진입.
+      // 이때 lastStampX도 같이 이동시켜 점프 구간에 스탬프가 폭증하지 않게 함.
+      if (car.x > lane.wrapMax) { car.x -= lane.wrapSpan; car.lastStampX -= lane.wrapSpan; }
+      else if (car.x + car.len < lane.wrapMin) { car.x += lane.wrapSpan; car.lastStampX += lane.wrapSpan; }
+
+      // 지나온 거리마다 세로선 스탬프를 남김(간격 stampGap).
+      if (dirSign !== 0) {
+        let guard = 0; // 안전장치: 한 프레임 과다 생성 방지
+        while (Math.abs(car.x - car.lastStampX) >= stampGap && guard < 200) {
+          car.lastStampX += stampGap * dirSign;
+          lane.stamps.push({ x: car.lastStampX, y: lane.centerY - stampH / 2, h: stampH, born: t });
+          guard++;
+        }
+      }
+    }
+
+    // 2) 스탬프 페이드 렌더 + 만료 제거
+    const alive = [];
+    for (const s of lane.stamps) {
+      const age = t - s.born;
+      if (age >= life) continue;        // 수명 다한 건 버림
+      alive.push(s);
+      const a = 1 - age / life;         // 나이 들수록 흐려짐(1→0)
+      ctx.fillStyle = `rgba(${fgc.r},${fgc.g},${fgc.b},${a})`;
+      ctx.fillRect(s.x, s.y, slw, s.h);
+    }
+    lane.stamps = alive;
+
+    // 3) 자동차 본체(가장 밝게) — 스탬프 위에
+    ctx.fillStyle = P.fg;
+    for (const car of lane.cars) {
+      const y = lane.centerY - carThick / 2;
+      // 화면 근처만 그림
+      if (car.x > W + 5 || car.x + car.len < -5) continue;
+      ctx.fillRect(car.x, y, car.len, carThick);
+    }
+  }
+}
+
+// hex → {r,g,b}
+function hexRGB(hex) {
+  const c = hex.replace('#', '');
+  return {
+    r: parseInt(c.substring(0, 2), 16),
+    g: parseInt(c.substring(2, 4), 16),
+    b: parseInt(c.substring(4, 6), 16)
+  };
+}
+
+// ─── 컨트롤 ───────────────────────────────────────────────
+const rangeMap = {
+  road:'vRoad', lanes:'vLanes', len:'vLen', lenVar:'vLenVar',
+  density:'vDensity', fillH:'vFillH', speed:'vSpeed', speedVar:'vSpeedVar',
+  trail:'vTrail', stamp:'vStamp', slw:'vSlw'
+};
+for (const key in rangeMap) {
+  const input = document.getElementById(key);
+  input.addEventListener('input', () => {
+    P[key] = parseFloat(input.value);
+    document.getElementById(rangeMap[key]).textContent = input.value;
+    // 구조에 영향 주는 것만 재생성 (속도/잔상/세로선은 실시간)
+    if (['road','lanes','len','lenVar','density','fillH','speedVar'].includes(key)) build();
+  });
+}
+
+const bgIn = document.getElementById('bg');
+const fgIn = document.getElementById('fg');
+bgIn.addEventListener('input', () => { P.bg = bgIn.value; document.body.style.background = P.bg; });
+fgIn.addEventListener('input', () => { P.fg = fgIn.value; });
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'h' || e.key === 'H') {
+    const p = document.getElementById('panel');
+    p.style.display = (p.style.display === 'none') ? 'block' : 'none';
+  }
+  if (e.key === 'r' || e.key === 'R') { build(); }
+});
+
+function resize() {
+  W = canvas.width = window.innerWidth;
+  H = canvas.height = window.innerHeight;
+  build();
+}
+window.addEventListener('resize', resize);
+
+resize();
+requestAnimationFrame(draw);
+</script>
+</body>
+</html>
